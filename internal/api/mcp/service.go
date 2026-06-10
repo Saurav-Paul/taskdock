@@ -60,6 +60,8 @@ func (s *Service) CallTool(name string, args map[string]any, scope string) ([]ma
 		text, isError = s.deleteIssue(args)
 	case "taskdock_save_comment":
 		text, isError = s.saveComment(args)
+	case "taskdock_save_link":
+		text, isError = s.saveLink(args)
 	case "taskdock_get_next_task":
 		text, isError = s.getNextTask(args)
 	default:
@@ -168,6 +170,16 @@ func (s *Service) getIssue(args map[string]any) ([]map[string]any, bool) {
 	fmt.Fprintf(&b, "- **Branch:** %s\n", issue.Branch)
 	fmt.Fprintf(&b, "- **Created:** %s | **Updated:** %s (UTC)\n", issue.CreatedAt.UTC().Format("2006-01-02 15:04"), issue.UpdatedAt.UTC().Format("2006-01-02 15:04"))
 
+	if len(issue.Links) > 0 {
+		b.WriteString("\n## Links\n\n")
+		for _, link := range issue.Links {
+			title := link.Title
+			if title == "" {
+				title = link.URL
+			}
+			fmt.Fprintf(&b, "- [%s](%s)\n", title, link.URL)
+		}
+	}
 	if len(issue.DependsOn) > 0 {
 		b.WriteString("\n## Blocked by\n\n")
 		for _, ref := range issue.DependsOn {
@@ -316,6 +328,7 @@ func (s *Service) saveIssue(args map[string]any) (string, bool) {
 		Priority:    argString(args, "priority"),
 		Assignee:    argString(args, "assignee"),
 		Parent:      argString(args, "parent"),
+		Number:      argInt(args, "number", 0),
 	}
 	if v, ok := args["labels"]; ok {
 		create.Labels = argStringSlice(v)
@@ -362,6 +375,23 @@ func (s *Service) saveComment(args map[string]any) (string, bool) {
 		return err.Error(), true
 	}
 	return fmt.Sprintf("Comment added to %s (id %d).", issueKey, comment.ID), false
+}
+
+func (s *Service) saveLink(args map[string]any) (string, bool) {
+	issueKey := argString(args, "issue")
+	url := argString(args, "url")
+	if issueKey == "" || url == "" {
+		return "'issue' and 'url' are required", true
+	}
+
+	link, err := s.issues.AddLink(issueKey, issues.LinkCreate{
+		URL:   url,
+		Title: argString(args, "title"),
+	})
+	if err != nil {
+		return err.Error(), true
+	}
+	return fmt.Sprintf("Link attached to %s (id %d).", issueKey, link.ID), false
 }
 
 func (s *Service) getNextTask(args map[string]any) (string, bool) {

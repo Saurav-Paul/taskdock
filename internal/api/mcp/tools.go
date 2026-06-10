@@ -111,6 +111,10 @@ var toolDefinitions = []toolDefinition{
 					"items":       map[string]any{"type": "string"},
 					"description": "Issue keys this issue is blocked by; replaces the current set. Pass [] to clear.",
 				},
+				"number": map[string]any{
+					"type":        "integer",
+					"description": "Explicit issue number when importing from another tracker (e.g. 951 → PRO-951). Omit for the next auto number. Creation only.",
+				},
 			},
 		},
 	},
@@ -149,6 +153,28 @@ var toolDefinitions = []toolDefinition{
 				},
 			},
 			"required": []string{"issue", "body"},
+		},
+	},
+	{
+		Name:        "taskdock_save_link",
+		Description: "Attach a URL to an issue — use this to link the PR you opened for a ticket, or any related doc. Links appear in get_issue output, so 'find the PR for this issue' is a get_issue call.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"issue": map[string]any{
+					"type":        "string",
+					"description": "Issue key, e.g. 'TD-12'",
+				},
+				"url": map[string]any{
+					"type":        "string",
+					"description": "The URL to attach (http/https)",
+				},
+				"title": map[string]any{
+					"type":        "string",
+					"description": "Optional display title, e.g. 'PR #42'",
+				},
+			},
+			"required": []string{"issue", "url"},
 		},
 	},
 	{

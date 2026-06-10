@@ -17,6 +17,7 @@ type Project struct {
 	Name        string    `gorm:"not null" json:"name"`
 	Key         string    `gorm:"uniqueIndex;not null" json:"key"`
 	Description string    `gorm:"not null;default:''" json:"description"`
+	NextNumber  int       `gorm:"not null;default:1" json:"next_number"` // issue counter
 	CreatedAt   time.Time `json:"created_at"`
 }
 

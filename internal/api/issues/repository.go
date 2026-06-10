@@ -3,7 +3,6 @@ package issues
 // Data access layer — all database queries for issues.
 
 import (
-	"database/sql"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/Saurav-Paul/taskdock/internal/api/labels"
+	"github.com/Saurav-Paul/taskdock/internal/api/projects"
 )
 
 // Repository provides database operations for the issues table.
@@ -27,7 +27,7 @@ func NewRepository(db *gorm.DB) *Repository {
 // Related issues preload their own Project so their keys can be computed.
 func (r *Repository) withRelations() *gorm.DB {
 	return r.db.
-		Preload("Project").Preload("Assignee").Preload("Labels").
+		Preload("Project").Preload("Assignee").Preload("Labels").Preload("Links").
 		Preload("Parent.Project").
 		Preload("Subtasks.Project").
 		Preload("DependsOn.Project").
@@ -81,19 +81,38 @@ func (r *Repository) GetByKey(key string) (*Issue, error) {
 	return &issue, nil
 }
 
-// Create inserts an issue, assigning the next per-project number inside a
-// transaction so concurrent creates can't collide.
-func (r *Repository) Create(issue *Issue) error {
+// Create inserts an issue inside a transaction. The number comes from the
+// project's next_number counter (never reused after deletes), unless an
+// explicit number is given — the import path for preserving keys from
+// another tracker. The counter always ends up past the highest number used.
+func (r *Repository) Create(issue *Issue, explicitNumber int) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		var max sql.NullInt64
-		if err := tx.Model(&Issue{}).
-			Where("project_id = ?", issue.ProjectID).
-			Select("MAX(number)").
-			Scan(&max).Error; err != nil {
+		var next int
+		if err := tx.Model(&projects.Project{}).
+			Where("id = ?", issue.ProjectID).
+			Select("next_number").
+			Scan(&next).Error; err != nil {
 			return err
 		}
-		issue.Number = int(max.Int64) + 1
-		return tx.Create(issue).Error
+
+		issue.Number = next
+		if explicitNumber > 0 {
+			issue.Number = explicitNumber
+		}
+
+		if err := tx.Create(issue).Error; err != nil {
+			if strings.Contains(err.Error(), "UNIQUE") {
+				return fmt.Errorf("issue number %d is already taken in this project", issue.Number)
+			}
+			return err
+		}
+
+		if issue.Number >= next {
+			return tx.Model(&projects.Project{}).
+				Where("id = ?", issue.ProjectID).
+				Update("next_number", issue.Number+1).Error
+		}
+		return nil
 	})
 }
 

@@ -8,9 +8,10 @@ import (
 
 // Config holds all application configuration.
 type Config struct {
-	DataDir  string // Root directory for persistent data (SQLite db lives here)
-	FilesDir string // Subdirectory for uploaded attachments (pasted images)
-	Port     string // HTTP port the server listens on
+	DataDir      string // Root directory for persistent data (SQLite db lives here)
+	FilesDir     string // Subdirectory for uploaded attachments (pasted images)
+	Port         string // HTTP port the server listens on
+	BranchPrefix string // Prepended to generated git branch names (e.g. "feature/")
 }
 
 // Load reads configuration from environment variables and creates required directories.
@@ -32,8 +33,9 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		DataDir:  dataDir,
-		FilesDir: filesDir,
-		Port:     port,
+		DataDir:      dataDir,
+		FilesDir:     filesDir,
+		Port:         port,
+		BranchPrefix: os.Getenv("TASKDOCK_BRANCH_PREFIX"),
 	}, nil
 }

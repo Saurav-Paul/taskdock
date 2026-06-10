@@ -27,6 +27,9 @@ func Register(g *echo.Group, db *gorm.DB, p *projects.Service, u *users.Service,
 	g.PATCH("/:key", handler.update)  // PATCH  /api/issues/TD-12
 	g.DELETE("/:key", handler.delete) // DELETE /api/issues/TD-12
 
+	g.POST("/:key/links", handler.addLink)          // POST   /api/issues/TD-12/links
+	g.DELETE("/:key/links/:id", handler.deleteLink) // DELETE /api/issues/TD-12/links/3
+
 	return service
 }
 
@@ -92,6 +95,30 @@ func (h *Handler) update(c echo.Context) error {
 
 func (h *Handler) delete(c echo.Context) error {
 	if err := h.service.Delete(c.Param("key")); err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, err.Error())
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (h *Handler) addLink(c echo.Context) error {
+	var req LinkCreate
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request body")
+	}
+
+	link, err := h.service.AddLink(c.Param("key"), req)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	return c.JSON(http.StatusCreated, link)
+}
+
+func (h *Handler) deleteLink(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid link id")
+	}
+	if err := h.service.DeleteLink(c.Param("key"), uint(id)); err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, err.Error())
 	}
 	return c.NoContent(http.StatusNoContent)

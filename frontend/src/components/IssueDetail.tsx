@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import type { Comment, Issue, IssuePatch, IssueRef, Label, User } from "../api";
+import type { Comment, Issue, IssueLink, IssuePatch, IssueRef, Label, User } from "../api";
 import {
   addComment,
+  addLink,
   createIssue,
   deleteIssue,
+  deleteLink,
   getComments,
   getIssue,
   getIssues,
@@ -28,6 +30,12 @@ function branchName(key: string, title: string): string {
   return name.length > 48 ? name.slice(0, 48).replace(/-+$/, "") : name;
 }
 
+function linkLabel(link: IssueLink): string {
+  if (link.title) return link.title;
+  const short = link.url.replace(/^https?:\/\//, "");
+  return short.length > 32 ? `${short.slice(0, 32)}…` : short;
+}
+
 interface Props {
   issue: Issue;
   users: User[];
@@ -50,6 +58,9 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
   const [addingDep, setAddingDep] = useState(false);
   const [depQuery, setDepQuery] = useState("");
   const [depResults, setDepResults] = useState<Issue[]>([]);
+  const [addingLink, setAddingLink] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkTitle, setLinkTitle] = useState("");
   const [fullscreen, setFullscreen] = useState(
     () => localStorage.getItem(FULLSCREEN_STORAGE_KEY) === "1"
   );
@@ -64,6 +75,9 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
     setSubtaskTitle("");
     setAddingDep(false);
     setDepQuery("");
+    setAddingLink(false);
+    setLinkUrl("");
+    setLinkTitle("");
     setCopied(null);
     getComments(initial.key).then(setComments).catch(() => setComments([]));
   }, [initial.key]);
@@ -178,6 +192,31 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
     void patch({ depends_on: issue.depends_on.filter((d) => d.key !== key).map((d) => d.key) });
   }
 
+  async function submitLink() {
+    const url = linkUrl.trim();
+    if (!url) return;
+    try {
+      await addLink(issue.key, url, linkTitle.trim() || undefined);
+      setLinkUrl("");
+      setLinkTitle("");
+      setAddingLink(false);
+      setIssue(await getIssue(issue.key));
+      setError(null);
+    } catch (e) {
+      setError(`Failed to add link: ${(e as Error).message}`);
+    }
+  }
+
+  async function removeLink(id: number) {
+    try {
+      await deleteLink(issue.key, id);
+      setIssue(await getIssue(issue.key));
+      setError(null);
+    } catch (e) {
+      setError(`Failed to remove link: ${(e as Error).message}`);
+    }
+  }
+
   async function submitComment() {
     const body = commentDraft.trim();
     if (!body) return;
@@ -201,7 +240,9 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
   }
 
   const subtasksDone = issue.subtasks.filter((s) => s.status === "done").length;
-  const branch = branchName(issue.key, issue.title);
+  // The server-provided branch is authoritative (it includes the configured
+  // prefix); fall back to the local helper for older servers.
+  const branch = issue.branch || branchName(issue.key, issue.title);
 
   return (
     <div className="detail-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -427,6 +468,55 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
                 ))}
               </div>
             </PropRow>
+            <PropRow label="Links">
+              <div className="relation-list">
+                {issue.links.map((l) => (
+                  <LinkChip key={l.id} link={l} onRemove={() => void removeLink(l.id)} />
+                ))}
+                {addingLink ? (
+                  <div className="link-add">
+                    <input
+                      placeholder="https://…"
+                      value={linkUrl}
+                      autoFocus
+                      onChange={(e) => setLinkUrl(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void submitLink();
+                        if (e.key === "Escape") {
+                          setAddingLink(false);
+                          setLinkUrl("");
+                          setLinkTitle("");
+                        }
+                      }}
+                    />
+                    <input
+                      placeholder="Title (optional)"
+                      value={linkTitle}
+                      onChange={(e) => setLinkTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void submitLink();
+                        if (e.key === "Escape") {
+                          setAddingLink(false);
+                          setLinkUrl("");
+                          setLinkTitle("");
+                        }
+                      }}
+                    />
+                    <button
+                      className="btn btn-small btn-primary"
+                      onClick={() => void submitLink()}
+                      disabled={!linkUrl.trim()}
+                    >
+                      Add link
+                    </button>
+                  </div>
+                ) : (
+                  <button className="label-toggle" onClick={() => setAddingLink(true)}>
+                    + Add
+                  </button>
+                )}
+              </div>
+            </PropRow>
             <PropRow label="Labels">
               <div className="label-toggle-list">
                 {labels.length === 0 && <span className="muted">No labels</span>}
@@ -483,6 +573,35 @@ function RelationChip({
         </button>
       )}
     </span>
+  );
+}
+
+function LinkChip({ link, onRemove }: { link: IssueLink; onRemove: () => void }) {
+  return (
+    <span className="link-chip">
+      <a href={link.url} target="_blank" rel="noopener noreferrer" title={link.url}>
+        <LinkIcon />
+        <span className="link-chip-label">{linkLabel(link)}</span>
+      </a>
+      <button className="relation-remove" onClick={onRemove} title="Remove link">
+        ×
+      </button>
+    </span>
+  );
+}
+
+function LinkIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-label="Link">
+      <path
+        d="M5.8 8.2 L8.2 5.8 M6.3 4.2 L7.5 3 A2.2 2.2 0 0 1 11 6.5 L9.8 7.7 M7.7 9.8 L6.5 11 A2.2 2.2 0 0 1 3 7.5 L4.2 6.3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

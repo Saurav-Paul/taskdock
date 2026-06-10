@@ -30,6 +30,9 @@ func main() {
 		log.Fatalf("Failed to setup database: %v", err)
 	}
 
+	// Branch names (UI copy button + MCP payloads) honor the configured prefix.
+	issues.SetBranchPrefix(cfg.BranchPrefix)
+
 	e := echo.New()
 	e.HideBanner = true
 	e.Use(middleware.CORS())

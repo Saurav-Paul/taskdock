@@ -20,6 +20,7 @@ type IssueCreate struct {
 	Labels      []string `json:"labels"`
 	Parent      string   `json:"parent"`     // parent issue key — makes this a subtask
 	DependsOn   []string `json:"depends_on"` // issue keys this issue is blocked by
+	Number      int      `json:"number"`     // explicit number for imports (0 = auto)
 }
 
 // IssueUpdate is the JSON body for PATCH /api/issues/:key.
@@ -69,6 +70,7 @@ type IssueResponse struct {
 	Subtasks    []IssueRef `json:"subtasks"`
 	DependsOn   []IssueRef `json:"depends_on"`
 	Blocks      []IssueRef `json:"blocks"`
+	Links       []Link     `json:"links"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
@@ -89,6 +91,7 @@ func ToResponse(i *Issue) IssueResponse {
 		Subtasks:    toRefs(i.Subtasks),
 		DependsOn:   toRefs(i.DependsOn),
 		Blocks:      toRefs(i.Blocks),
+		Links:       append([]Link{}, i.Links...),
 		CreatedAt:   i.CreatedAt,
 		UpdatedAt:   i.UpdatedAt,
 	}
@@ -109,9 +112,17 @@ func toRef(i *Issue) IssueRef {
 	return IssueRef{Key: i.Key(), Title: i.Title, Status: i.Status}
 }
 
+// branchPrefix is prepended to every generated branch name (e.g. "feature/").
+// Set once at startup from TASKDOCK_BRANCH_PREFIX via SetBranchPrefix.
+var branchPrefix string
+
+// SetBranchPrefix configures the prefix used by BranchName.
+func SetBranchPrefix(prefix string) { branchPrefix = prefix }
+
 // BranchName generates a git feature-branch name for an issue:
-// "TD-5" + "CommandPalette.tsx overlay" → "td-5-commandpalette-tsx-overlay".
-// The frontend's copy-branch button uses the same slug rules.
+// "TD-5" + "CommandPalette.tsx overlay" → "feature/td-5-commandpalette-tsx-overlay".
+// The UI copy-branch button uses the API-provided value, so prefix changes
+// apply everywhere at once.
 func BranchName(key, title string) string {
 	slug := strings.ToLower(key + " " + title)
 	slug = nonAlnumRun.ReplaceAllString(slug, "-")
@@ -119,7 +130,7 @@ func BranchName(key, title string) string {
 	if len(slug) > 48 {
 		slug = strings.TrimRight(slug[:48], "-")
 	}
-	return slug
+	return branchPrefix + slug
 }
 
 var nonAlnumRun = regexp.MustCompile(`[^a-z0-9]+`)

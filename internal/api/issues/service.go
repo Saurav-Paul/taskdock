@@ -105,7 +105,7 @@ func (s *Service) Create(req IssueCreate) (*IssueResponse, error) {
 		issue.ParentID = &parent.ID
 	}
 
-	if err := s.repo.Create(&issue); err != nil {
+	if err := s.repo.Create(&issue, req.Number); err != nil {
 		return nil, err
 	}
 

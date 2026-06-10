@@ -37,6 +37,7 @@ type Issue struct {
 	// DependsOn = issues this one is blocked by; Blocks = the reverse edge.
 	DependsOn []Issue `gorm:"many2many:issue_relations;joinForeignKey:issue_id;joinReferences:depends_on_id"`
 	Blocks    []Issue `gorm:"many2many:issue_relations;joinForeignKey:depends_on_id;joinReferences:issue_id"`
+	Links     []Link  `gorm:"foreignKey:IssueID"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

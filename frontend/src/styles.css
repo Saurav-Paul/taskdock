@@ -862,6 +862,64 @@ select:focus {
   min-width: 0;
 }
 
+/* ── Links ──────────────────────────────────────────── */
+
+.link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.link-chip a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.link-chip a:hover .link-chip-label {
+  text-decoration: underline;
+}
+
+.link-chip svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.link-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-add {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.link-add input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  outline: none;
+}
+
+.link-add .btn {
+  align-self: flex-start;
+}
+
 /* ── Comments ───────────────────────────────────────── */
 
 .comments {

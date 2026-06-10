@@ -57,14 +57,24 @@ claude mcp add --transport http taskdock http://localhost:8860/mcp
 | `taskdock_list_issues` | Filter by project / status / assignee / text |
 | `taskdock_save_issue` | Create or update — title, status, priority, labels, parent, dependencies |
 | `taskdock_save_comment` | Log progress on a ticket (default author: `claude`) |
+| `taskdock_save_link` | Attach a URL — e.g. the PR an agent just opened for the ticket |
 | `taskdock_delete_issue` | Delete by key |
 | `taskdock_list_projects` | List projects |
 
-Every issue payload includes a ready-made `branch` field, so the agent workflow is:
+Every issue payload includes a ready-made `branch` field (prefix configurable
+via `TASKDOCK_BRANCH_PREFIX`, default `feature/` in Docker), so the agent
+workflow is:
 
 ```
-get_next_task → git checkout -b aur-8-fix-crash-on-device-rotation → work → save_comment → save_issue {status: done}
+get_next_task → git checkout -b feature/aur-8-fix-crash-on-device-rotation
+             → work → save_link {PR url} → save_comment → save_issue {status: done}
 ```
+
+**Migrating from another tracker?** `save_issue` (and `POST /api/issues`)
+accept an explicit `number` on creation, so imported issues keep their
+original keys (`951` → `PRO-951`) — the per-project counter automatically
+continues past the highest imported number, and numbers are never reused
+after deletion.
 
 ### Project-scoped MCP
 

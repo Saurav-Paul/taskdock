@@ -58,6 +58,13 @@ export interface IssueRef {
   status: Status;
 }
 
+export interface IssueLink {
+  id: number;
+  url: string;
+  title: string;
+  created_at: string;
+}
+
 export interface Issue {
   id: number;
   key: string;
@@ -72,6 +79,9 @@ export interface Issue {
   subtasks: IssueRef[];
   depends_on: IssueRef[];
   blocks: IssueRef[];
+  links: IssueLink[];
+  /** Server-computed branch name (includes the configured prefix). */
+  branch: string;
   created_at: string;
   updated_at: string;
 }
@@ -171,6 +181,15 @@ export const addComment = (key: string, author: string, body: string) =>
     method: "POST",
     body: JSON.stringify({ author, body }),
   });
+
+export const addLink = (key: string, url: string, title?: string) =>
+  request<IssueLink>(`/api/issues/${key}/links`, {
+    method: "POST",
+    body: JSON.stringify(title ? { url, title } : { url }),
+  });
+
+export const deleteLink = (key: string, id: number) =>
+  request<void>(`/api/issues/${key}/links/${id}`, { method: "DELETE" });
 
 export interface Attachment {
   url: string;

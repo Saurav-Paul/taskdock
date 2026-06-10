@@ -8,4 +8,5 @@ services:
     environment:
       - DATA_DIR=/data
       - TASKDOCK_PORT=8860
+      - TASKDOCK_BRANCH_PREFIX=${TASKDOCK_BRANCH_PREFIX:-feature/}
     restart: unless-stopped
