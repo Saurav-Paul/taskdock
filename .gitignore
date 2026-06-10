@@ -1,0 +1,13 @@
+# Data (SQLite db lives here in dev)
+/data/
+
+# Binaries
+/bin/
+/dist/
+
+# Frontend
+node_modules/
+/static/
+
+# OS noise
+.DS_Store
