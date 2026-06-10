@@ -9,10 +9,11 @@ interface Props {
   onSelectProject: (key: string | null) => void;
   onSelectStatus: (status: Status | null) => void;
   onNewIssue: () => void;
+  onNewProject: () => void;
 }
 
 export function Sidebar(props: Props) {
-  const { projects, selectedProject, selectedStatus, onSelectProject, onSelectStatus, onNewIssue } = props;
+  const { projects, selectedProject, selectedStatus, onSelectProject, onSelectStatus, onNewIssue, onNewProject } = props;
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -44,6 +45,9 @@ export function Sidebar(props: Props) {
             {p.name}
           </button>
         ))}
+        <button className="sidebar-item sidebar-item-muted" onClick={onNewProject}>
+          + New project
+        </button>
       </div>
 
       <div className="sidebar-section">

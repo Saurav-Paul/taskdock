@@ -165,6 +165,76 @@ kbd {
   color: var(--muted);
 }
 
+.sidebar-item-muted {
+  color: var(--muted);
+}
+
+.sidebar-item-muted:hover {
+  color: var(--text);
+}
+
+/* ── Project header ─────────────────────────────────── */
+
+.project-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.project-name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.project-key-chip {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.project-description {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-header-spacer {
+  flex: 1;
+}
+
+.project-name-input,
+.project-description-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  outline: none;
+}
+
+.project-name-input {
+  width: 200px;
+  font-weight: 600;
+}
+
+.project-description-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.project-name-input:focus,
+.project-description-input:focus {
+  border-color: var(--accent);
+}
+
 /* ── Buttons ────────────────────────────────────────── */
 
 .btn {
@@ -859,10 +929,42 @@ select:focus {
   gap: 12px;
 }
 
+.modal-small {
+  width: min(420px, calc(100vw - 48px));
+}
+
 .modal-header {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.modal .key-input {
+  width: 100px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-family: var(--mono);
+  outline: none;
+}
+
+.modal .key-input:focus {
+  border-color: var(--accent);
+}
+
+.modal .description-input {
+  min-height: 64px;
+  resize: vertical;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  outline: none;
+}
+
+.modal .description-input:focus {
+  border-color: var(--accent);
 }
 
 .project-select {

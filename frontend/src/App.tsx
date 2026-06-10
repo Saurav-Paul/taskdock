@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Issue, Label, Project, Status, User } from "./api";
 import { getIssue, getIssues, getLabels, getProjects, getUsers, STATUS_LABELS } from "./api";
 import { CreateIssueModal } from "./components/CreateIssueModal";
+import { CreateProjectModal } from "./components/CreateProjectModal";
 import { IssueDetail } from "./components/IssueDetail";
 import { IssueList } from "./components/IssueList";
+import { ProjectHeader } from "./components/ProjectHeader";
 import { Sidebar } from "./components/Sidebar";
 
 export default function App() {
@@ -20,6 +22,7 @@ export default function App() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [openIssue, setOpenIssue] = useState<Issue | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showCreateProject, setShowCreateProject] = useState(false);
 
   useEffect(() => {
     Promise.all([getProjects(), getUsers(), getLabels()])
@@ -29,6 +32,12 @@ export default function App() {
         setLabels(l);
       })
       .catch((e) => setLoadError(`Failed to load workspace: ${(e as Error).message}`));
+  }, []);
+
+  const refreshProjects = useCallback(() => {
+    getProjects()
+      .then(setProjects)
+      .catch((e) => setLoadError(`Failed to load projects: ${(e as Error).message}`));
   }, []);
 
   const loadIssues = useCallback(() => {
@@ -50,8 +59,8 @@ export default function App() {
   }, [loadIssues]);
 
   // Keyboard shortcuts — read latest state via ref to keep a single stable listener.
-  const stateRef = useRef({ issues, selectedIndex, openIssue, showCreate });
-  stateRef.current = { issues, selectedIndex, openIssue, showCreate };
+  const stateRef = useRef({ issues, selectedIndex, openIssue, showCreate, showCreateProject });
+  stateRef.current = { issues, selectedIndex, openIssue, showCreate, showCreateProject };
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -64,18 +73,19 @@ export default function App() {
         target.isContentEditable;
 
       if (e.key === "Escape") {
-        if (s.showCreate) setShowCreate(false);
+        if (s.showCreateProject) setShowCreateProject(false);
+        else if (s.showCreate) setShowCreate(false);
         else if (s.openIssue) setOpenIssue(null);
         return;
       }
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
 
-      if (e.key === "c" && !s.showCreate) {
+      if (e.key === "c" && !s.showCreate && !s.showCreateProject) {
         e.preventDefault();
         setShowCreate(true);
         return;
       }
-      if (s.showCreate || s.openIssue) return;
+      if (s.showCreate || s.showCreateProject || s.openIssue) return;
 
       if (e.key === "j") {
         e.preventDefault();
@@ -96,6 +106,10 @@ export default function App() {
     (projectFilter ? projectFilter : "All issues") +
     (statusFilter ? ` · ${STATUS_LABELS[statusFilter]}` : "");
 
+  const selectedProject = projectFilter
+    ? projects.find((p) => p.key === projectFilter) ?? null
+    : null;
+
   return (
     <div className="app">
       <Sidebar
@@ -105,6 +119,7 @@ export default function App() {
         onSelectProject={setProjectFilter}
         onSelectStatus={setStatusFilter}
         onNewIssue={() => setShowCreate(true)}
+        onNewProject={() => setShowCreateProject(true)}
       />
       <main className="main">
         <div className="main-header">
@@ -120,6 +135,17 @@ export default function App() {
           </span>
         </div>
         {loadError && <div className="error-bar">{loadError}</div>}
+        {selectedProject && (
+          <ProjectHeader
+            project={selectedProject}
+            issueCount={issues.length}
+            onChanged={refreshProjects}
+            onDeleted={() => {
+              refreshProjects();
+              setProjectFilter(null);
+            }}
+          />
+        )}
         <IssueList
           issues={issues}
           labels={labels}
@@ -158,6 +184,17 @@ export default function App() {
           onCreated={() => {
             setShowCreate(false);
             loadIssues();
+          }}
+        />
+      )}
+
+      {showCreateProject && (
+        <CreateProjectModal
+          onClose={() => setShowCreateProject(false)}
+          onCreated={(project) => {
+            setShowCreateProject(false);
+            refreshProjects();
+            setProjectFilter(project.key);
           }}
         />
       )}

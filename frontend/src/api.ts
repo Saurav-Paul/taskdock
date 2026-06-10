@@ -28,6 +28,18 @@ export interface Project {
   created_at: string;
 }
 
+export interface NewProject {
+  name: string;
+  /** Optional — the server derives the first 3 letters uppercased when omitted. */
+  key?: string;
+  description?: string;
+}
+
+export interface ProjectPatch {
+  name?: string;
+  description?: string;
+}
+
 export interface User {
   id: number;
   name: string;
@@ -118,6 +130,15 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const getProjects = () => request<Project[]>("/api/projects");
+
+export const createProject = (body: NewProject) =>
+  request<Project>("/api/projects", { method: "POST", body: JSON.stringify(body) });
+
+export const updateProject = (key: string, patch: ProjectPatch) =>
+  request<Project>(`/api/projects/${key}`, { method: "PATCH", body: JSON.stringify(patch) });
+
+export const deleteProject = (key: string) =>
+  request<void>(`/api/projects/${key}`, { method: "DELETE" });
 export const getUsers = () => request<User[]>("/api/users");
 export const getLabels = () => request<Label[]>("/api/labels");
 
