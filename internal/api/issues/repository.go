@@ -167,12 +167,20 @@ func (r *Repository) Delete(issue *Issue) error {
 // NextTask returns the highest-priority unstarted issue for a user —
 // the query behind the taskdock_get_next_task MCP tool.
 // Issues blocked by an unfinished dependency are skipped.
-func (r *Repository) NextTask(assigneeName string) (*Issue, error) {
-	var issue Issue
-	err := r.withRelations().
+// A non-empty projectKey restricts the search to that project.
+func (r *Repository) NextTask(assigneeName, projectKey string) (*Issue, error) {
+	q := r.withRelations().
 		Joins("JOIN users ON users.id = issues.assignee_id").
 		Where("users.name = ?", assigneeName).
-		Where("issues.status IN ?", []string{"backlog", "todo"}).
+		Where("issues.status IN ?", []string{"backlog", "todo"})
+
+	if projectKey != "" {
+		q = q.Joins("JOIN projects ON projects.id = issues.project_id").
+			Where("projects.key = ?", strings.ToUpper(projectKey))
+	}
+
+	var issue Issue
+	err := q.
 		Where(`NOT EXISTS (
 			SELECT 1 FROM issue_relations ir
 			JOIN issues dep ON dep.id = ir.depends_on_id

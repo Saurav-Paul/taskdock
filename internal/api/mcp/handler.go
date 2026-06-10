@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 )
@@ -31,8 +32,14 @@ type toolCallParams struct {
 func Register(e *echo.Echo, service *Service, port string) {
 	handler := &Handler{service: service, port: port}
 
-	e.POST("/mcp", handler.handle)              // JSON-RPC protocol endpoint
-	e.GET("/mcp/config.json", handler.config)   // Claude-compatible config snippet
+	e.POST("/mcp", handler.handle)            // JSON-RPC protocol endpoint (all projects)
+	e.GET("/mcp/config.json", handler.config) // Claude-compatible config snippet
+
+	// Project-scoped variant: same tools, but issue listing/creation is
+	// locked to one project — paste into a repo's MCP config so that
+	// repo's tickets all live in that project.
+	e.POST("/mcp/:project", handler.handle)
+	e.GET("/mcp/:project/config.json", handler.config)
 }
 
 // Handler dispatches JSON-RPC requests to the tool service.
@@ -42,7 +49,10 @@ type Handler struct {
 }
 
 // handle processes a single or batch JSON-RPC request.
+// For /mcp/:project routes, the scope param locks tools to that project.
 func (h *Handler) handle(c echo.Context) error {
+	scope := c.Param("project")
+
 	var raw json.RawMessage
 	if err := json.NewDecoder(c.Request().Body).Decode(&raw); err != nil {
 		return c.JSON(http.StatusOK, errorResponse(nil, -32700, "Parse error"))
@@ -56,7 +66,7 @@ func (h *Handler) handle(c echo.Context) error {
 		}
 		results := make([]map[string]any, 0, len(reqs))
 		for _, req := range reqs {
-			result := h.dispatch(req)
+			result := h.dispatch(req, scope)
 			if req.ID != nil {
 				results = append(results, result)
 			}
@@ -69,11 +79,11 @@ func (h *Handler) handle(c echo.Context) error {
 	if err := json.Unmarshal(raw, &req); err != nil {
 		return c.JSON(http.StatusOK, errorResponse(nil, -32600, "Invalid Request"))
 	}
-	return c.JSON(http.StatusOK, h.dispatch(req))
+	return c.JSON(http.StatusOK, h.dispatch(req, scope))
 }
 
 // dispatch routes a JSON-RPC method to its implementation.
-func (h *Handler) dispatch(req jsonrpcRequest) map[string]any {
+func (h *Handler) dispatch(req jsonrpcRequest, scope string) map[string]any {
 	switch req.Method {
 	case "initialize":
 		return successResponse(req.ID, map[string]any{
@@ -98,7 +108,7 @@ func (h *Handler) dispatch(req jsonrpcRequest) map[string]any {
 		if err := json.Unmarshal(req.Params, &params); err != nil {
 			return errorResponse(req.ID, -32602, "Invalid params")
 		}
-		content, isError := h.service.CallTool(params.Name, params.Arguments)
+		content, isError := h.service.CallTool(params.Name, params.Arguments, scope)
 		return successResponse(req.ID, map[string]any{
 			"content": content,
 			"isError": isError,
@@ -112,13 +122,20 @@ func (h *Handler) dispatch(req jsonrpcRequest) map[string]any {
 	}
 }
 
-// config returns a ready-to-paste Claude MCP config snippet.
+// config returns a ready-to-paste Claude MCP config snippet —
+// project-scoped when requested via /mcp/:project/config.json.
 func (h *Handler) config(c echo.Context) error {
+	name := "taskdock"
+	url := fmt.Sprintf("http://localhost:%s/mcp", h.port)
+	if scope := c.Param("project"); scope != "" {
+		name = "taskdock-" + strings.ToLower(scope)
+		url += "/" + strings.ToUpper(scope)
+	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"mcpServers": map[string]any{
-			"taskdock": map[string]any{
+			name: map[string]any{
 				"type": "http",
-				"url":  fmt.Sprintf("http://localhost:%s/mcp", h.port),
+				"url":  url,
 			},
 		},
 	})

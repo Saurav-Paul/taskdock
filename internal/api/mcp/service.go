@@ -33,7 +33,16 @@ func NewService(p *projects.Service, i *issues.Service, c *comments.Service, fil
 // CallTool executes a tool by name. Returns MCP content blocks and an
 // isError flag. Most tools return a single text block; get_issue also
 // attaches pasted images as image blocks so the model can see them.
-func (s *Service) CallTool(name string, args map[string]any) ([]map[string]any, bool) {
+// A non-empty scope (from /mcp/:project) locks the call to that project.
+func (s *Service) CallTool(name string, args map[string]any, scope string) ([]map[string]any, bool) {
+	if scope != "" {
+		var errText string
+		args, errText = s.applyScope(name, args, scope)
+		if errText != "" {
+			return textContent(errText), true
+		}
+	}
+
 	if name == "taskdock_get_issue" {
 		return s.getIssue(args)
 	}
@@ -62,6 +71,39 @@ func (s *Service) CallTool(name string, args map[string]any) ([]map[string]any, 
 // textContent wraps a string in a single MCP text block.
 func textContent(text string) []map[string]any {
 	return []map[string]any{{"type": "text", "text": text}}
+}
+
+// applyScope rewrites tool arguments so the call stays inside one project:
+// listing and next-task are filtered to it, new issues are created in it,
+// and issue keys from other projects are rejected. Returns the adjusted
+// args, or a non-empty error text.
+func (s *Service) applyScope(name string, args map[string]any, scope string) (map[string]any, string) {
+	project, err := s.projects.GetByKey(scope)
+	if err != nil {
+		return args, fmt.Sprintf("unknown project in MCP url: %s", scope)
+	}
+
+	if args == nil {
+		args = map[string]any{}
+	}
+
+	// Reject direct references to issues outside the scoped project.
+	for _, argName := range []string{"key", "issue"} {
+		if v := argString(args, argName); v != "" &&
+			!strings.HasPrefix(strings.ToUpper(v), project.Key+"-") {
+			return args, fmt.Sprintf("issue %s is outside project %s (project-scoped MCP)", v, project.Key)
+		}
+	}
+
+	switch name {
+	case "taskdock_list_issues", "taskdock_get_next_task":
+		args["project"] = project.Key
+	case "taskdock_save_issue":
+		if argString(args, "key") == "" { // create path → force the project
+			args["project"] = project.Key
+		}
+	}
+	return args, ""
 }
 
 func (s *Service) listProjects() (string, bool) {
@@ -327,9 +369,13 @@ func (s *Service) getNextTask(args map[string]any) (string, bool) {
 	if assignee == "" {
 		assignee = "claude"
 	}
+	project := argString(args, "project")
 
-	issue, err := s.issues.NextTask(assignee)
+	issue, err := s.issues.NextTask(assignee, project)
 	if err != nil {
+		if project != "" {
+			return fmt.Sprintf("No open tasks for '%s' in project %s.", assignee, project), false
+		}
 		return fmt.Sprintf("No open tasks for '%s'.", assignee), false
 	}
 	return toJSON(issue), false

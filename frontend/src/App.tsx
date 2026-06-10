@@ -5,6 +5,7 @@ import { CreateIssueModal } from "./components/CreateIssueModal";
 import { CreateProjectModal } from "./components/CreateProjectModal";
 import { IssueDetail } from "./components/IssueDetail";
 import { IssueList } from "./components/IssueList";
+import { McpIcon, McpModal } from "./components/McpModal";
 import { ProjectHeader } from "./components/ProjectHeader";
 import { Sidebar } from "./components/Sidebar";
 
@@ -23,6 +24,7 @@ export default function App() {
   const [openIssue, setOpenIssue] = useState<Issue | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
+  const [showMcp, setShowMcp] = useState(false);
 
   useEffect(() => {
     Promise.all([getProjects(), getUsers(), getLabels()])
@@ -59,8 +61,8 @@ export default function App() {
   }, [loadIssues]);
 
   // Keyboard shortcuts — read latest state via ref to keep a single stable listener.
-  const stateRef = useRef({ issues, selectedIndex, openIssue, showCreate, showCreateProject });
-  stateRef.current = { issues, selectedIndex, openIssue, showCreate, showCreateProject };
+  const stateRef = useRef({ issues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp });
+  stateRef.current = { issues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp };
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -73,19 +75,20 @@ export default function App() {
         target.isContentEditable;
 
       if (e.key === "Escape") {
-        if (s.showCreateProject) setShowCreateProject(false);
+        if (s.showMcp) setShowMcp(false);
+        else if (s.showCreateProject) setShowCreateProject(false);
         else if (s.showCreate) setShowCreate(false);
         else if (s.openIssue) setOpenIssue(null);
         return;
       }
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
 
-      if (e.key === "c" && !s.showCreate && !s.showCreateProject) {
+      if (e.key === "c" && !s.showCreate && !s.showCreateProject && !s.showMcp) {
         e.preventDefault();
         setShowCreate(true);
         return;
       }
-      if (s.showCreate || s.showCreateProject || s.openIssue) return;
+      if (s.showCreate || s.showCreateProject || s.showMcp || s.openIssue) return;
 
       if (e.key === "j") {
         e.preventDefault();
@@ -133,6 +136,13 @@ export default function App() {
           <span className="issue-count muted">
             {issues.length} issue{issues.length === 1 ? "" : "s"}
           </span>
+          <button
+            className="btn btn-small mcp-btn"
+            onClick={() => setShowMcp(true)}
+            title="Connect via MCP"
+          >
+            <McpIcon /> MCP
+          </button>
         </div>
         {loadError && <div className="error-bar">{loadError}</div>}
         {selectedProject && (
@@ -187,6 +197,8 @@ export default function App() {
           }}
         />
       )}
+
+      {showMcp && <McpModal projectKey={projectFilter} onClose={() => setShowMcp(false)} />}
 
       {showCreateProject && (
         <CreateProjectModal

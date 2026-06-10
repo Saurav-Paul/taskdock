@@ -258,9 +258,10 @@ func (s *Service) Delete(key string) error {
 	return s.repo.Delete(issue)
 }
 
-// NextTask returns the highest-priority unstarted issue assigned to the user.
-func (s *Service) NextTask(assigneeName string) (*IssueResponse, error) {
-	issue, err := s.repo.NextTask(assigneeName)
+// NextTask returns the highest-priority unstarted issue assigned to the
+// user, optionally restricted to one project.
+func (s *Service) NextTask(assigneeName, projectKey string) (*IssueResponse, error) {
+	issue, err := s.repo.NextTask(assigneeName, projectKey)
 	if err != nil {
 		return nil, err
 	}

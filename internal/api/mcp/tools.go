@@ -162,6 +162,10 @@ var toolDefinitions = []toolDefinition{
 					"default":     "claude",
 					"description": "Assignee handle; defaults to 'claude'",
 				},
+				"project": map[string]any{
+					"type":        "string",
+					"description": "Optional project key to restrict the search, e.g. 'TD'",
+				},
 			},
 		},
 	},
