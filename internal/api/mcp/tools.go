@@ -65,7 +65,7 @@ var toolDefinitions = []toolDefinition{
 	},
 	{
 		Name:        "taskdock_save_issue",
-		Description: "Create or update an issue. If 'key' is provided, updates that issue (only the fields you pass change). Otherwise creates a new issue — 'project' and 'title' are required for creation.",
+		Description: "Create or update an issue. If 'key' is provided, updates that issue (only the fields you pass change). Otherwise creates a new issue — 'project' and 'title' are required for creation. To embed an image in the description, first upload it outside MCP (curl -F 'file=@img.png;type=image/png' <server>/api/attachments → {\"url\": \"/files/...\"}), then reference it in the markdown as ![](/files/...).",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -130,7 +130,7 @@ var toolDefinitions = []toolDefinition{
 	},
 	{
 		Name:        "taskdock_save_comment",
-		Description: "Add a markdown comment to an issue. Use this to log progress, decisions, or results while working on a ticket.",
+		Description: "Add a markdown comment to an issue. Use this to log progress, decisions, or results while working on a ticket. Images work the same as in descriptions: upload via curl -F 'file=@img.png;type=image/png' <server>/api/attachments, then embed the returned url as ![](/files/...).",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
