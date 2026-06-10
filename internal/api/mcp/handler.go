@@ -100,7 +100,7 @@ func (h *Handler) dispatch(req jsonrpcRequest) map[string]any {
 		}
 		content, isError := h.service.CallTool(params.Name, params.Arguments)
 		return successResponse(req.ID, map[string]any{
-			"content": []map[string]any{{"type": "text", "text": content}},
+			"content": content,
 			"isError": isError,
 		})
 

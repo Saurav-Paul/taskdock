@@ -6,6 +6,7 @@ import (
 	"embed"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/pressly/goose/v3"
 	"gorm.io/driver/sqlite"
@@ -25,7 +26,12 @@ var migrations embed.FS
 func Setup(cfg *config.Config) (*gorm.DB, error) {
 	dbPath := filepath.Join(cfg.DataDir, "taskdock.db")
 
-	db, err := gorm.Open(sqlite.Open(dbPath+"?_foreign_keys=on"), &gorm.Config{})
+	// Store timestamps in UTC — otherwise rows written by a local dev server
+	// (UTC+3) and the Docker container (UTC) end up with mixed offsets.
+	// The frontend renders them in local time.
+	db, err := gorm.Open(sqlite.Open(dbPath+"?_foreign_keys=on"), &gorm.Config{
+		NowFunc: func() time.Time { return time.Now().UTC() },
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}

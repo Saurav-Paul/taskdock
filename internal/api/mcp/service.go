@@ -4,8 +4,12 @@ package mcp
 // returns markdown/JSON text for the MCP client.
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/Saurav-Paul/taskdock/internal/api/comments"
@@ -18,33 +22,46 @@ type Service struct {
 	projects *projects.Service
 	issues   *issues.Service
 	comments *comments.Service
+	filesDir string // where pasted-image attachments live on disk
 }
 
 // NewService creates the MCP tool service with its domain dependencies.
-func NewService(p *projects.Service, i *issues.Service, c *comments.Service) *Service {
-	return &Service{projects: p, issues: i, comments: c}
+func NewService(p *projects.Service, i *issues.Service, c *comments.Service, filesDir string) *Service {
+	return &Service{projects: p, issues: i, comments: c, filesDir: filesDir}
 }
 
-// CallTool executes a tool by name. Returns the text content and an isError flag.
-func (s *Service) CallTool(name string, args map[string]any) (string, bool) {
+// CallTool executes a tool by name. Returns MCP content blocks and an
+// isError flag. Most tools return a single text block; get_issue also
+// attaches pasted images as image blocks so the model can see them.
+func (s *Service) CallTool(name string, args map[string]any) ([]map[string]any, bool) {
+	if name == "taskdock_get_issue" {
+		return s.getIssue(args)
+	}
+
+	var text string
+	var isError bool
 	switch name {
 	case "taskdock_list_projects":
-		return s.listProjects()
+		text, isError = s.listProjects()
 	case "taskdock_list_issues":
-		return s.listIssues(args)
-	case "taskdock_get_issue":
-		return s.getIssue(args)
+		text, isError = s.listIssues(args)
 	case "taskdock_save_issue":
-		return s.saveIssue(args)
+		text, isError = s.saveIssue(args)
 	case "taskdock_delete_issue":
-		return s.deleteIssue(args)
+		text, isError = s.deleteIssue(args)
 	case "taskdock_save_comment":
-		return s.saveComment(args)
+		text, isError = s.saveComment(args)
 	case "taskdock_get_next_task":
-		return s.getNextTask(args)
+		text, isError = s.getNextTask(args)
 	default:
-		return fmt.Sprintf("Unknown tool: %s", name), true
+		text, isError = fmt.Sprintf("Unknown tool: %s", name), true
 	}
+	return textContent(text), isError
+}
+
+// textContent wraps a string in a single MCP text block.
+func textContent(text string) []map[string]any {
+	return []map[string]any{{"type": "text", "text": text}}
 }
 
 func (s *Service) listProjects() (string, bool) {
@@ -77,20 +94,20 @@ func (s *Service) listIssues(args map[string]any) (string, bool) {
 	return toJSON(rows), false
 }
 
-func (s *Service) getIssue(args map[string]any) (string, bool) {
+func (s *Service) getIssue(args map[string]any) ([]map[string]any, bool) {
 	key := argString(args, "key")
 	if key == "" {
-		return "'key' is required", true
+		return textContent("'key' is required"), true
 	}
 
 	issue, err := s.issues.Get(key)
 	if err != nil {
-		return fmt.Sprintf("Issue not found: %s", key), true
+		return textContent(fmt.Sprintf("Issue not found: %s", key)), true
 	}
 
 	commentRows, err := s.comments.ListForIssue(key)
 	if err != nil {
-		return err.Error(), true
+		return textContent(err.Error()), true
 	}
 
 	// Render the issue as markdown — nicer for the model to read than raw JSON.
@@ -106,7 +123,7 @@ func (s *Service) getIssue(args map[string]any) (string, bool) {
 	if issue.Parent != nil {
 		fmt.Fprintf(&b, "- **Parent:** [%s] %s (%s)\n", issue.Parent.Key, issue.Parent.Title, issue.Parent.Status)
 	}
-	fmt.Fprintf(&b, "- **Created:** %s | **Updated:** %s\n", issue.CreatedAt.Format("2006-01-02 15:04"), issue.UpdatedAt.Format("2006-01-02 15:04"))
+	fmt.Fprintf(&b, "- **Created:** %s | **Updated:** %s (UTC)\n", issue.CreatedAt.UTC().Format("2006-01-02 15:04"), issue.UpdatedAt.UTC().Format("2006-01-02 15:04"))
 
 	if len(issue.DependsOn) > 0 {
 		b.WriteString("\n## Blocked by\n\n")
@@ -134,11 +151,71 @@ func (s *Service) getIssue(args map[string]any) (string, bool) {
 	if len(commentRows) > 0 {
 		fmt.Fprintf(&b, "\n## Comments (%d)\n", len(commentRows))
 		for _, comment := range commentRows {
-			fmt.Fprintf(&b, "\n**%s** (%s):\n%s\n", comment.Author, comment.CreatedAt.Format("2006-01-02 15:04"), comment.Body)
+			fmt.Fprintf(&b, "\n**%s** (%s):\n%s\n", comment.Author, comment.CreatedAt.UTC().Format("2006-01-02 15:04"), comment.Body)
 		}
 	}
 
-	return b.String(), false
+	// Attach pasted images as MCP image blocks so the model can actually
+	// see them (the markdown above only carries their URLs).
+	bodies := []string{issue.Description}
+	for _, comment := range commentRows {
+		bodies = append(bodies, comment.Body)
+	}
+	content := append(textContent(b.String()), s.imageBlocks(bodies)...)
+	return content, false
+}
+
+// fileRefPattern matches attachment references in markdown: ![...](/files/x.png)
+var fileRefPattern = regexp.MustCompile(`!\[[^\]]*\]\((/files/[^)\s]+)\)`)
+
+// imageMimeTypes maps attachment extensions to MCP image block mime types.
+// SVG is omitted — models can't view it as a raster image block.
+var imageMimeTypes = map[string]string{
+	".png":  "image/png",
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".gif":  "image/gif",
+	".webp": "image/webp",
+}
+
+const (
+	maxImageBlocks    = 6               // cap blocks per issue to keep responses sane
+	maxImageBlockSize = 2 * 1024 * 1024 // skip files larger than 2MB
+)
+
+// imageBlocks finds /files/* image references in the given markdown bodies
+// and returns them as base64 MCP image blocks.
+func (s *Service) imageBlocks(bodies []string) []map[string]any {
+	seen := map[string]bool{}
+	blocks := []map[string]any{}
+
+	for _, body := range bodies {
+		for _, match := range fileRefPattern.FindAllStringSubmatch(body, -1) {
+			url := match[1]
+			if seen[url] || len(blocks) >= maxImageBlocks {
+				continue
+			}
+			seen[url] = true
+
+			mimeType, ok := imageMimeTypes[strings.ToLower(filepath.Ext(url))]
+			if !ok {
+				continue
+			}
+
+			// filepath.Base guards against path traversal in the URL.
+			data, err := os.ReadFile(filepath.Join(s.filesDir, filepath.Base(url)))
+			if err != nil || len(data) > maxImageBlockSize {
+				continue // missing or oversized — the markdown link is still there
+			}
+
+			blocks = append(blocks, map[string]any{
+				"type":     "image",
+				"data":     base64.StdEncoding.EncodeToString(data),
+				"mimeType": mimeType,
+			})
+		}
+	}
+	return blocks
 }
 
 func (s *Service) saveIssue(args map[string]any) (string, bool) {

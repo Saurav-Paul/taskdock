@@ -54,7 +54,7 @@ func main() {
 	e.Static("/files", cfg.FilesDir)
 
 	// --- MCP endpoint (POST /mcp) ---
-	mcpService := mcp.NewService(projectService, issueService, commentService)
+	mcpService := mcp.NewService(projectService, issueService, commentService, cfg.FilesDir)
 	mcp.Register(e, mcpService, cfg.Port)
 
 	// --- Static frontend (prod) ---
