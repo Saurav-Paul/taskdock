@@ -119,16 +119,25 @@ var branchPrefix string
 // SetBranchPrefix configures the prefix used by BranchName.
 func SetBranchPrefix(prefix string) { branchPrefix = prefix }
 
+// maxBranchSlugLen caps the slug part of generated branch names (the prefix
+// is not counted). Generous enough that real-world titles rarely get cut.
+const maxBranchSlugLen = 72
+
 // BranchName generates a git feature-branch name for an issue:
 // "TD-5" + "CommandPalette.tsx overlay" → "feature/td-5-commandpalette-tsx-overlay".
 // The UI copy-branch button uses the API-provided value, so prefix changes
-// apply everywhere at once.
+// apply everywhere at once. Long slugs are cut at a word boundary, never
+// mid-word.
 func BranchName(key, title string) string {
 	slug := strings.ToLower(key + " " + title)
 	slug = nonAlnumRun.ReplaceAllString(slug, "-")
 	slug = strings.Trim(slug, "-")
-	if len(slug) > 48 {
-		slug = strings.TrimRight(slug[:48], "-")
+	if len(slug) > maxBranchSlugLen {
+		cut := strings.LastIndex(slug[:maxBranchSlugLen+1], "-")
+		if cut <= 0 {
+			cut = maxBranchSlugLen
+		}
+		slug = slug[:cut]
 	}
 	return branchPrefix + slug
 }

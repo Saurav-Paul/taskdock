@@ -1,5 +1,5 @@
 // Tiny markdown renderer for read-only contexts (comments).
-// Supports headings, bold, italic, inline code, code blocks, links, images, lists.
+// Supports headings, bold, italic, inline code, code blocks, links, images, lists, tables.
 
 function escapeHtml(s: string): string {
   return s
@@ -22,6 +22,35 @@ function inline(s: string): string {
     );
 }
 
+// GFM table header separator: | --- | :---: | ---: | (leading/trailing pipes optional)
+const TABLE_SEPARATOR = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+
+function isTableRow(line: string): boolean {
+  return line.trim().startsWith("|");
+}
+
+function splitTableRow(line: string): string[] {
+  let s = line.trim();
+  if (s.startsWith("|")) s = s.slice(1);
+  if (s.endsWith("|")) s = s.slice(0, -1);
+  return s.split("|").map((cell) => cell.trim());
+}
+
+function renderTable(rows: string[]): string {
+  const header = splitTableRow(rows[0]).map((c) => `<th>${inline(c)}</th>`).join("");
+  const out = [`<table><thead><tr>${header}</tr></thead>`];
+  const body = rows.slice(2);
+  if (body.length) {
+    out.push("<tbody>");
+    for (const row of body) {
+      out.push(`<tr>${splitTableRow(row).map((c) => `<td>${inline(c)}</td>`).join("")}</tr>`);
+    }
+    out.push("</tbody>");
+  }
+  out.push("</table>");
+  return out.join("");
+}
+
 export function markdownToHtml(md: string): string {
   const lines = escapeHtml(md).split("\n");
   const out: string[] = [];
@@ -42,7 +71,8 @@ export function markdownToHtml(md: string): string {
     }
   };
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     if (line.trim().startsWith("```")) {
       flushPara();
       closeList();
@@ -52,6 +82,19 @@ export function markdownToHtml(md: string): string {
     }
     if (inCode) {
       out.push(line);
+      continue;
+    }
+    // GFM table: a | row followed by a header separator line.
+    if (isTableRow(line) && i + 1 < lines.length && isTableRow(lines[i + 1]) && TABLE_SEPARATOR.test(lines[i + 1])) {
+      flushPara();
+      closeList();
+      const rows: string[] = [];
+      while (i < lines.length && isTableRow(lines[i])) {
+        rows.push(lines[i]);
+        i++;
+      }
+      i--; // step back; the for-loop increments past the table
+      out.push(renderTable(rows));
       continue;
     }
     const heading = line.match(/^(#{1,6})\s+(.*)$/);

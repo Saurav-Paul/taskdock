@@ -707,6 +707,34 @@ select:focus {
   color: var(--muted);
 }
 
+.markdown table,
+.md-editor .ProseMirror table {
+  border-collapse: collapse;
+  max-width: 100%;
+  margin: 0 0 8px;
+}
+
+.markdown th,
+.markdown td,
+.md-editor .ProseMirror th,
+.md-editor .ProseMirror td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown th,
+.md-editor .ProseMirror th {
+  font-weight: 600;
+  background: var(--panel);
+}
+
+.md-editor .ProseMirror th p,
+.md-editor .ProseMirror td p {
+  margin: 0;
+}
+
 .md-editor .ProseMirror blockquote,
 .markdown blockquote {
   margin: 0 0 8px;

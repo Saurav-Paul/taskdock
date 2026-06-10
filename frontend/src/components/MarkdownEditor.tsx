@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import Image from "@tiptap/extension-image";
 import StarterKit from "@tiptap/starter-kit";
+import Table from "@tiptap/extension-table";
+import TableRow from "@tiptap/extension-table-row";
+import TableCell from "@tiptap/extension-table-cell";
+import TableHeader from "@tiptap/extension-table-header";
 import { Markdown } from "tiptap-markdown";
 import { uploadAttachment } from "../api";
 
@@ -49,7 +53,15 @@ export function MarkdownEditor({ value, placeholder, autofocus, onSave, onChange
   }
 
   const editor = useEditor({
-    extensions: [StarterKit, Image.configure({ inline: false }), Markdown.configure({ html: false })],
+    extensions: [
+      StarterKit,
+      Image.configure({ inline: false }),
+      Table.configure({ resizable: false }),
+      TableRow,
+      TableCell,
+      TableHeader,
+      Markdown.configure({ html: false }),
+    ],
     content: value,
     autofocus: autofocus ? "end" : false,
     onUpdate: ({ editor }) => {
