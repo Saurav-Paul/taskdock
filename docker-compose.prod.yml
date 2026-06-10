@@ -1,0 +1,11 @@
+services:
+  taskdock:
+    image: sauravpaul/taskdock:latest
+    ports:
+      - "8860:8860"
+    volumes:
+      - ./data:/data
+    environment:
+      - DATA_DIR=/data
+      - TASKDOCK_PORT=8860
+    restart: unless-stopped
