@@ -352,12 +352,50 @@ kbd {
   overflow: hidden;
 }
 
+.detail-panel.fullscreen {
+  width: 100vw;
+  height: 100vh;
+  border: none;
+  border-radius: 0;
+}
+
 .detail-header {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.icon-btn svg {
+  display: block;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 6px;
+}
+
+.copied-note {
+  font-size: 11px;
 }
 
 .detail-header-spacer {

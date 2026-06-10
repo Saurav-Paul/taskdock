@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Comment, Issue, IssuePatch, IssueRef, Label, User } from "../api";
 import {
   addComment,
@@ -16,6 +16,17 @@ import {
 import { Avatar, relativeTime, StatusIcon, STATUS_COLORS } from "./bits";
 import { Markdown } from "./Markdown";
 import { MarkdownEditor } from "./MarkdownEditor";
+
+const FULLSCREEN_STORAGE_KEY = "taskdock.detail-fullscreen";
+
+function branchName(key: string, title: string): string {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const name = slug ? `${key.toLowerCase()}-${slug}` : key.toLowerCase();
+  return name.length > 48 ? name.slice(0, 48).replace(/-+$/, "") : name;
+}
 
 interface Props {
   issue: Issue;
@@ -39,6 +50,11 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
   const [addingDep, setAddingDep] = useState(false);
   const [depQuery, setDepQuery] = useState("");
   const [depResults, setDepResults] = useState<Issue[]>([]);
+  const [fullscreen, setFullscreen] = useState(
+    () => localStorage.getItem(FULLSCREEN_STORAGE_KEY) === "1"
+  );
+  const [copied, setCopied] = useState<"key" | "branch" | null>(null);
+  const copiedTimer = useRef<number | null>(null);
 
   useEffect(() => {
     setIssue(initial);
@@ -48,8 +64,43 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
     setSubtaskTitle("");
     setAddingDep(false);
     setDepQuery("");
+    setCopied(null);
     getComments(initial.key).then(setComments).catch(() => setComments([]));
   }, [initial.key]);
+
+  useEffect(() => {
+    localStorage.setItem(FULLSCREEN_STORAGE_KEY, fullscreen ? "1" : "0");
+  }, [fullscreen]);
+
+  // `f` toggles fullscreen while the detail is open (ignored while typing).
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      const typing =
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable;
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "f") {
+        e.preventDefault();
+        setFullscreen((f) => !f);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  function copyText(text: string, which: "key" | "branch") {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopied(which);
+        if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+        copiedTimer.current = window.setTimeout(() => setCopied(null), 1500);
+      })
+      .catch((e) => setError(`Failed to copy: ${(e as Error).message}`));
+  }
 
   // Search candidates for the "Blocked by" add control.
   useEffect(() => {
@@ -150,13 +201,36 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
   }
 
   const subtasksDone = issue.subtasks.filter((s) => s.status === "done").length;
+  const branch = branchName(issue.key, issue.title);
 
   return (
     <div className="detail-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="detail-panel">
+      <div className={`detail-panel ${fullscreen ? "fullscreen" : ""}`}>
         <div className="detail-header">
           <span className="issue-key">{issue.key}</span>
+          <button
+            className="icon-btn"
+            onClick={() => copyText(issue.key, "key")}
+            title={`Copy ${issue.key}`}
+          >
+            {copied === "key" ? <CheckIcon /> : <CopyIcon />}
+          </button>
+          <button
+            className="icon-btn"
+            onClick={() => copyText(branch, "branch")}
+            title={branch}
+          >
+            {copied === "branch" ? <CheckIcon /> : <BranchIcon />}
+          </button>
+          {copied && <span className="muted copied-note">Copied</span>}
           <span className="detail-header-spacer" />
+          <button
+            className="btn btn-small btn-icon"
+            onClick={() => setFullscreen((f) => !f)}
+            title={fullscreen ? "Exit fullscreen (f)" : "Fullscreen (f)"}
+          >
+            {fullscreen ? <ContractIcon /> : <ExpandIcon />}
+          </button>
           <button className="btn btn-small btn-danger" onClick={handleDelete}>
             Delete
           </button>
@@ -409,6 +483,83 @@ function RelationChip({
         </button>
       )}
     </span>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" aria-label="Copy">
+      <rect x="4.5" y="4.5" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path
+        d="M9.5 2.5 H4 A1.5 1.5 0 0 0 2.5 4 V9.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" aria-label="Copied">
+      <path
+        d="M2.5 7.5 L5.5 10.5 L11.5 3.5"
+        fill="none"
+        stroke="#4cb782"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function BranchIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" aria-label="Copy branch name">
+      <circle cx="3.5" cy="3" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="3.5" cy="11" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="10.5" cy="3.5" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path
+        d="M3.5 4.6 V9.4 M10.5 5.1 C10.5 7.8 5.8 6.8 4.8 9.6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function ExpandIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" aria-label="Fullscreen">
+      <path
+        d="M8.5 2 H12 V5.5 M12 2 L8 6 M5.5 12 H2 V8.5 M2 12 L6 8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ContractIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" aria-label="Exit fullscreen">
+      <path
+        d="M12 5.5 H8.5 V2 M12.5 1.5 L8.5 5.5 M2 8.5 H5.5 V12 M1.5 12.5 L5.5 8.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
