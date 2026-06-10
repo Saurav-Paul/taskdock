@@ -198,7 +198,9 @@ export default function App() {
         />
       )}
 
-      {showMcp && <McpModal projectKey={projectFilter} onClose={() => setShowMcp(false)} />}
+      {showMcp && (
+        <McpModal projectKey={projectFilter} projects={projects} onClose={() => setShowMcp(false)} />
+      )}
 
       {showCreateProject && (
         <CreateProjectModal

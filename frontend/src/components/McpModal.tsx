@@ -1,21 +1,26 @@
 import { useRef, useState } from "react";
+import type { Project } from "../api";
 
 interface Props {
-  /** Selected project key (e.g. "TD"), or null for "All issues". */
+  /** Sidebar-selected project key (e.g. "TD"), or null for "All issues". */
   projectKey: string | null;
+  projects: Project[];
   onClose: () => void;
 }
 
 type CopyTarget = "command" | "json" | "url";
 
-export function McpModal({ projectKey, onClose }: Props) {
+export function McpModal({ projectKey, projects, onClose }: Props) {
+  // Which project to generate config for — defaults to the sidebar
+  // selection, switchable inside the modal ("" = workspace-wide).
+  const [scope, setScope] = useState<string>(projectKey ?? "");
   const [copied, setCopied] = useState<CopyTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
   const copiedTimer = useRef<number | null>(null);
 
   const host = window.location.host;
-  const serverName = projectKey ? `taskdock-${projectKey.toLowerCase()}` : "taskdock";
-  const url = `http://${host}/mcp${projectKey ? `/${projectKey}` : ""}`;
+  const serverName = scope ? `taskdock-${scope.toLowerCase()}` : "taskdock";
+  const url = `http://${host}/mcp${scope ? `/${scope}` : ""}`;
   const command = `claude mcp add --transport http --scope project ${serverName} ${url}`;
   const json = JSON.stringify(
     { mcpServers: { [serverName]: { type: "http", url } } },
@@ -46,9 +51,21 @@ export function McpModal({ projectKey, onClose }: Props) {
         </div>
         {error && <div className="error-bar">{error}</div>}
 
+        <div className="mcp-block">
+          <div className="prop-label">Project</div>
+          <select value={scope} onChange={(e) => setScope(e.target.value)}>
+            <option value="">Workspace (all projects)</option>
+            {projects.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.name} ({p.key})
+              </option>
+            ))}
+          </select>
+        </div>
+
         <p className="mcp-scope-note">
-          {projectKey
-            ? `Project-scoped: tools are locked to ${projectKey} — new issues land in this project.`
+          {scope
+            ? `Project-scoped: tools are locked to ${scope} — new issues land in this project.`
             : "Workspace-wide: tools can touch every project."}
         </p>
 
