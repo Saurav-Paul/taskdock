@@ -123,7 +123,7 @@ func (s *Service) getIssue(args map[string]any) ([]map[string]any, bool) {
 	if issue.Parent != nil {
 		fmt.Fprintf(&b, "- **Parent:** [%s] %s (%s)\n", issue.Parent.Key, issue.Parent.Title, issue.Parent.Status)
 	}
-	fmt.Fprintf(&b, "- **Branch:** %s\n", branchName(issue.Key, issue.Title))
+	fmt.Fprintf(&b, "- **Branch:** %s\n", issue.Branch)
 	fmt.Fprintf(&b, "- **Created:** %s | **Updated:** %s (UTC)\n", issue.CreatedAt.UTC().Format("2006-01-02 15:04"), issue.UpdatedAt.UTC().Format("2006-01-02 15:04"))
 
 	if len(issue.DependsOn) > 0 {
@@ -334,21 +334,6 @@ func (s *Service) getNextTask(args map[string]any) (string, bool) {
 	}
 	return toJSON(issue), false
 }
-
-// branchName generates a git feature-branch name from an issue:
-// "TD-5" + "CommandPalette.tsx overlay" → "td-5-commandpalette-tsx-overlay".
-// Mirrors the slug logic in the frontend's copy-branch button.
-func branchName(key, title string) string {
-	slug := strings.ToLower(key + " " + title)
-	slug = nonAlnumRun.ReplaceAllString(slug, "-")
-	slug = strings.Trim(slug, "-")
-	if len(slug) > 48 {
-		slug = strings.TrimRight(slug[:48], "-")
-	}
-	return slug
-}
-
-var nonAlnumRun = regexp.MustCompile(`[^a-z0-9]+`)
 
 // --- argument helpers ---
 

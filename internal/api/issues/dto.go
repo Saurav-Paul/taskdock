@@ -3,7 +3,9 @@ package issues
 // Request/response shapes for the issues API.
 
 import (
+	"regexp"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -54,7 +56,8 @@ type IssueRef struct {
 // IssueResponse is the JSON shape returned for an issue.
 type IssueResponse struct {
 	ID          uint       `json:"id"`
-	Key         string     `json:"key"` // e.g. "TD-12"
+	Key         string     `json:"key"`    // e.g. "TD-12"
+	Branch      string     `json:"branch"` // e.g. "td-12-fix-the-thing"
 	Project     string     `json:"project"`
 	Title       string     `json:"title"`
 	Description string     `json:"description"`
@@ -76,6 +79,7 @@ func ToResponse(i *Issue) IssueResponse {
 	resp := IssueResponse{
 		ID:          i.ID,
 		Key:         i.Key(),
+		Branch:      BranchName(i.Key(), i.Title),
 		Project:     i.Project.Key,
 		Title:       i.Title,
 		Description: i.Description,
@@ -104,6 +108,21 @@ func ToResponse(i *Issue) IssueResponse {
 func toRef(i *Issue) IssueRef {
 	return IssueRef{Key: i.Key(), Title: i.Title, Status: i.Status}
 }
+
+// BranchName generates a git feature-branch name for an issue:
+// "TD-5" + "CommandPalette.tsx overlay" → "td-5-commandpalette-tsx-overlay".
+// The frontend's copy-branch button uses the same slug rules.
+func BranchName(key, title string) string {
+	slug := strings.ToLower(key + " " + title)
+	slug = nonAlnumRun.ReplaceAllString(slug, "-")
+	slug = strings.Trim(slug, "-")
+	if len(slug) > 48 {
+		slug = strings.TrimRight(slug[:48], "-")
+	}
+	return slug
+}
+
+var nonAlnumRun = regexp.MustCompile(`[^a-z0-9]+`)
 
 func toRefs(rows []Issue) []IssueRef {
 	sort.Slice(rows, func(a, b int) bool { return rows[a].Number < rows[b].Number })
