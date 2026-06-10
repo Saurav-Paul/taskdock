@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 
+	"github.com/Saurav-Paul/taskdock/internal/api/attachments"
 	"github.com/Saurav-Paul/taskdock/internal/api/comments"
 	"github.com/Saurav-Paul/taskdock/internal/api/issues"
 	"github.com/Saurav-Paul/taskdock/internal/api/labels"
@@ -47,6 +48,10 @@ func main() {
 	issuesGroup := e.Group("/api/issues")
 	issueService := issues.Register(issuesGroup, db, projectService, userService, labelService)
 	commentService := comments.Register(issuesGroup, db, issueService, userService)
+
+	// --- Attachments (pasted images) ---
+	attachments.Register(e.Group("/api/attachments"), cfg)
+	e.Static("/files", cfg.FilesDir)
 
 	// --- MCP endpoint (POST /mcp) ---
 	mcpService := mcp.NewService(projectService, issueService, commentService)

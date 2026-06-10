@@ -40,6 +40,12 @@ export interface Label {
   color: string;
 }
 
+export interface IssueRef {
+  key: string;
+  title: string;
+  status: Status;
+}
+
 export interface Issue {
   id: number;
   key: string;
@@ -50,6 +56,10 @@ export interface Issue {
   priority: Priority;
   assignee?: string;
   labels: string[];
+  parent?: IssueRef | null;
+  subtasks: IssueRef[];
+  depends_on: IssueRef[];
+  blocks: IssueRef[];
   created_at: string;
   updated_at: string;
 }
@@ -75,6 +85,10 @@ export interface IssuePatch {
   priority?: Priority;
   assignee?: string;
   labels?: string[];
+  /** Parent issue key; "" detaches. */
+  parent?: string;
+  /** Replaces the full set of dependency keys; [] clears. */
+  depends_on?: string[];
 }
 
 export interface NewIssue extends IssuePatch {
@@ -82,15 +96,23 @@ export interface NewIssue extends IssuePatch {
   title: string;
 }
 
+async function fail(res: Response): Promise<never> {
+  const text = await res.text().catch(() => "");
+  let message = "";
+  try {
+    message = (JSON.parse(text) as { message?: string }).message ?? "";
+  } catch {
+    // not JSON — fall through to raw text
+  }
+  throw new Error(message || text || `${res.status} ${res.statusText}`);
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${res.statusText}${text ? `: ${text}` : ""}`);
-  }
+  if (!res.ok) return fail(res);
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
@@ -109,6 +131,8 @@ export function getIssues(filter: IssueFilter = {}): Promise<Issue[]> {
   return request<Issue[]>(`/api/issues${qs ? `?${qs}` : ""}`);
 }
 
+export const getIssue = (key: string) => request<Issue>(`/api/issues/${key}`);
+
 export const createIssue = (body: NewIssue) =>
   request<Issue>("/api/issues", { method: "POST", body: JSON.stringify(body) });
 
@@ -126,3 +150,17 @@ export const addComment = (key: string, author: string, body: string) =>
     method: "POST",
     body: JSON.stringify({ author, body }),
   });
+
+export interface Attachment {
+  url: string;
+  filename: string;
+}
+
+export async function uploadAttachment(file: File): Promise<Attachment> {
+  const form = new FormData();
+  form.append("file", file);
+  // No explicit Content-Type — the browser sets the multipart boundary.
+  const res = await fetch("/api/attachments", { method: "POST", body: form });
+  if (!res.ok) return fail(res);
+  return res.json() as Promise<Attachment>;
+}

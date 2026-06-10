@@ -97,6 +97,14 @@ func (s *Service) Create(req IssueCreate) (*IssueResponse, error) {
 		issue.AssigneeID = &user.ID
 	}
 
+	if req.Parent != "" {
+		parent, err := s.repo.GetByKey(req.Parent)
+		if err != nil {
+			return nil, fmt.Errorf("parent issue not found: %s", req.Parent)
+		}
+		issue.ParentID = &parent.ID
+	}
+
 	if err := s.repo.Create(&issue); err != nil {
 		return nil, err
 	}
@@ -107,6 +115,16 @@ func (s *Service) Create(req IssueCreate) (*IssueResponse, error) {
 			return nil, err
 		}
 		if err := s.repo.ReplaceLabels(&issue, labelRows); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(req.DependsOn) > 0 {
+		deps, err := s.resolveDependencies(&issue, req.DependsOn)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.repo.ReplaceDependsOn(&issue, deps); err != nil {
 			return nil, err
 		}
 	}
@@ -155,6 +173,27 @@ func (s *Service) Update(key string, req IssueUpdate) (*IssueResponse, error) {
 			updates["assignee_id"] = user.ID
 		}
 	}
+	if req.Parent != nil {
+		if *req.Parent == "" {
+			updates["parent_id"] = nil // detach from parent
+		} else {
+			parent, err := s.repo.GetByKey(*req.Parent)
+			if err != nil {
+				return nil, fmt.Errorf("parent issue not found: %s", *req.Parent)
+			}
+			if parent.ID == issue.ID {
+				return nil, fmt.Errorf("an issue cannot be its own parent")
+			}
+			cycle, err := s.repo.WouldCreateParentCycle(issue.ID, parent.ID)
+			if err != nil {
+				return nil, err
+			}
+			if cycle {
+				return nil, fmt.Errorf("cannot set %s as parent: it is a subtask of %s", *req.Parent, key)
+			}
+			updates["parent_id"] = parent.ID
+		}
+	}
 
 	if len(updates) > 0 {
 		if err := s.repo.Update(issue, updates); err != nil {
@@ -172,7 +211,42 @@ func (s *Service) Update(key string, req IssueUpdate) (*IssueResponse, error) {
 		}
 	}
 
+	if req.DependsOn != nil {
+		deps, err := s.resolveDependencies(issue, *req.DependsOn)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.repo.ReplaceDependsOn(issue, deps); err != nil {
+			return nil, err
+		}
+	}
+
 	return s.Get(key)
+}
+
+// resolveDependencies turns issue keys into rows, rejecting self-references
+// and circular dependency chains.
+func (s *Service) resolveDependencies(issue *Issue, keys []string) ([]Issue, error) {
+	deps := make([]Issue, 0, len(keys))
+	for _, depKey := range keys {
+		dep, err := s.repo.GetByKey(depKey)
+		if err != nil {
+			return nil, fmt.Errorf("dependency issue not found: %s", depKey)
+		}
+		if dep.ID == issue.ID {
+			return nil, fmt.Errorf("an issue cannot depend on itself")
+		}
+		// Reject cycles: the dependency must not (transitively) depend on us.
+		cycle, err := s.repo.DependsReaches(dep.ID, issue.ID)
+		if err != nil {
+			return nil, err
+		}
+		if cycle {
+			return nil, fmt.Errorf("circular dependency: %s already depends on this issue", depKey)
+		}
+		deps = append(deps, *dep)
+	}
+	return deps, nil
 }
 
 // Delete removes an issue by key.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Issue, Label, Project, Status, User } from "./api";
-import { getIssues, getLabels, getProjects, getUsers, STATUS_LABELS } from "./api";
+import { getIssue, getIssues, getLabels, getProjects, getUsers, STATUS_LABELS } from "./api";
 import { CreateIssueModal } from "./components/CreateIssueModal";
 import { IssueDetail } from "./components/IssueDetail";
 import { IssueList } from "./components/IssueList";
@@ -136,6 +136,11 @@ export default function App() {
           labels={labels}
           onClose={() => setOpenIssue(null)}
           onChanged={loadIssues}
+          onOpenIssue={(key) =>
+            getIssue(key)
+              .then(setOpenIssue)
+              .catch((e) => setLoadError(`Failed to open ${key}: ${(e as Error).message}`))
+          }
           onDeleted={() => {
             setOpenIssue(null);
             loadIssues();

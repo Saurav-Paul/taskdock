@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
+import Image from "@tiptap/extension-image";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
+import { uploadAttachment } from "../api";
 
 function getMarkdown(editor: Editor): string {
   return (editor.storage as Record<string, any>).markdown.getMarkdown();
@@ -19,13 +21,35 @@ interface Props {
 
 export function MarkdownEditor({ value, placeholder, autofocus, onSave, onChange }: Props) {
   const [empty, setEmpty] = useState(value.trim() === "");
+  const [uploading, setUploading] = useState(false);
   const saveRef = useRef(onSave);
   const changeRef = useRef(onChange);
   saveRef.current = onSave;
   changeRef.current = onChange;
 
+  async function uploadImages(files: File[], pos?: number) {
+    const images = files.filter((f) => f.type.startsWith("image/"));
+    if (images.length < files.length) {
+      alert("Only image files (png, jpeg, gif, webp, svg) can be attached.");
+    }
+    if (images.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of images) {
+        const { url } = await uploadAttachment(file);
+        const node = { type: "image", attrs: { src: url } };
+        if (pos != null) editor?.chain().insertContentAt(pos, node).run();
+        else editor?.chain().focus().insertContent(node).run();
+      }
+    } catch (e) {
+      alert(`Image upload failed: ${(e as Error).message}`);
+    } finally {
+      setUploading(false);
+    }
+  }
+
   const editor = useEditor({
-    extensions: [StarterKit, Markdown.configure({ html: false })],
+    extensions: [StarterKit, Image.configure({ inline: false }), Markdown.configure({ html: false })],
     content: value,
     autofocus: autofocus ? "end" : false,
     onUpdate: ({ editor }) => {
@@ -50,6 +74,21 @@ export function MarkdownEditor({ value, placeholder, autofocus, onSave, onChange
         }
         return false;
       },
+      handlePaste: (_view, event) => {
+        const files = Array.from(event.clipboardData?.files ?? []);
+        if (files.length === 0) return false;
+        event.preventDefault();
+        void uploadImages(files);
+        return true;
+      },
+      handleDrop: (view, event) => {
+        const files = Array.from(event.dataTransfer?.files ?? []);
+        if (files.length === 0) return false;
+        event.preventDefault();
+        const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+        void uploadImages(files, coords?.pos);
+        return true;
+      },
     },
   });
 
@@ -63,8 +102,9 @@ export function MarkdownEditor({ value, placeholder, autofocus, onSave, onChange
   }, [value, editor]);
 
   return (
-    <div className="md-editor">
+    <div className={`md-editor ${uploading ? "uploading" : ""}`}>
       {empty && placeholder && <div className="md-placeholder">{placeholder}</div>}
+      {uploading && <div className="md-uploading">Uploading image…</div>}
       <EditorContent editor={editor} />
     </div>
   );

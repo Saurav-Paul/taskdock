@@ -24,8 +24,14 @@ func NewRepository(db *gorm.DB) *Repository {
 }
 
 // withRelations preloads everything needed to render an issue response.
+// Related issues preload their own Project so their keys can be computed.
 func (r *Repository) withRelations() *gorm.DB {
-	return r.db.Preload("Project").Preload("Assignee").Preload("Labels")
+	return r.db.
+		Preload("Project").Preload("Assignee").Preload("Labels").
+		Preload("Parent.Project").
+		Preload("Subtasks.Project").
+		Preload("DependsOn.Project").
+		Preload("Blocks.Project")
 }
 
 // List returns issues matching the filters, newest first.
@@ -101,6 +107,58 @@ func (r *Repository) ReplaceLabels(issue *Issue, labelRows []labels.Label) error
 	return r.db.Model(issue).Association("Labels").Replace(labelRows)
 }
 
+// ReplaceDependsOn swaps the set of issues this issue is blocked by.
+func (r *Repository) ReplaceDependsOn(issue *Issue, deps []Issue) error {
+	return r.db.Model(issue).Association("DependsOn").Replace(deps)
+}
+
+// WouldCreateParentCycle reports whether setting parentID as the parent of
+// issueID would create a loop in the subtask tree (walks up the chain).
+func (r *Repository) WouldCreateParentCycle(issueID, parentID uint) (bool, error) {
+	current := parentID
+	for current != 0 {
+		if current == issueID {
+			return true, nil
+		}
+		var next *uint
+		err := r.db.Model(&Issue{}).Where("id = ?", current).
+			Select("parent_id").Scan(&next).Error
+		if err != nil || next == nil {
+			return false, err
+		}
+		current = *next
+	}
+	return false, nil
+}
+
+// DependsReaches reports whether targetID is reachable from fromID by
+// following depends_on edges — used to reject circular dependencies.
+func (r *Repository) DependsReaches(fromID, targetID uint) (bool, error) {
+	visited := map[uint]bool{}
+	queue := []uint{fromID}
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+		if id == targetID {
+			return true, nil
+		}
+		if visited[id] {
+			continue
+		}
+		visited[id] = true
+
+		var deps []uint
+		err := r.db.Table("issue_relations").
+			Where("issue_id = ?", id).
+			Pluck("depends_on_id", &deps).Error
+		if err != nil {
+			return false, err
+		}
+		queue = append(queue, deps...)
+	}
+	return false, nil
+}
+
 // Delete removes an issue; labels and comments cascade via FKs.
 func (r *Repository) Delete(issue *Issue) error {
 	return r.db.Delete(issue).Error
@@ -108,12 +166,18 @@ func (r *Repository) Delete(issue *Issue) error {
 
 // NextTask returns the highest-priority unstarted issue for a user —
 // the query behind the taskdock_get_next_task MCP tool.
+// Issues blocked by an unfinished dependency are skipped.
 func (r *Repository) NextTask(assigneeName string) (*Issue, error) {
 	var issue Issue
 	err := r.withRelations().
 		Joins("JOIN users ON users.id = issues.assignee_id").
 		Where("users.name = ?", assigneeName).
 		Where("issues.status IN ?", []string{"backlog", "todo"}).
+		Where(`NOT EXISTS (
+			SELECT 1 FROM issue_relations ir
+			JOIN issues dep ON dep.id = ir.depends_on_id
+			WHERE ir.issue_id = issues.id
+			  AND dep.status NOT IN ('done', 'canceled'))`).
 		Order(priorityOrder + ", issues.created_at ASC").
 		First(&issue).Error
 	if err != nil {

@@ -3,12 +3,14 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 )
 
 // Config holds all application configuration.
 type Config struct {
-	DataDir string // Root directory for persistent data (SQLite db lives here)
-	Port    string // HTTP port the server listens on
+	DataDir  string // Root directory for persistent data (SQLite db lives here)
+	FilesDir string // Subdirectory for uploaded attachments (pasted images)
+	Port     string // HTTP port the server listens on
 }
 
 // Load reads configuration from environment variables and creates required directories.
@@ -24,12 +26,14 @@ func Load() (*Config, error) {
 		port = "8860"
 	}
 
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
+	filesDir := filepath.Join(dataDir, "files")
+	if err := os.MkdirAll(filesDir, 0755); err != nil {
 		return nil, err
 	}
 
 	return &Config{
-		DataDir: dataDir,
-		Port:    port,
+		DataDir:  dataDir,
+		FilesDir: filesDir,
+		Port:     port,
 	}, nil
 }

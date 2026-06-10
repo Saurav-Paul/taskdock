@@ -9,6 +9,10 @@ Single static Go binary (~30MB RAM idle), SQLite storage, React + Tiptap UI.
 
 - **Projects** with Linear-style issue keys (`TD-12`)
 - **Issues** — markdown descriptions, status, priority, assignee, labels
+- **Subtasks & dependencies** — parent/child issues and "blocked by"
+  relations with cycle protection; `get_next_task` skips blocked issues
+- **Image pasting** — paste/drop images into the editor; stored in
+  `/data/files`, served at `/files/*` (`POST /api/attachments`)
 - **Comments** — markdown thread per issue; Claude logs progress here
 - **MCP server** at `POST /mcp` (JSON-RPC 2.0, streamable HTTP) with 7 tools,
   including `taskdock_get_next_task`: the highest-priority open issue

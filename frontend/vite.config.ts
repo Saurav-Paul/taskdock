@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: {
       "/api": "http://localhost:8860",
       "/mcp": "http://localhost:8860",
+      "/files": "http://localhost:8860",
     },
   },
   build: {

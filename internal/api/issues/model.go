@@ -30,8 +30,15 @@ type Issue struct {
 	AssigneeID  *uint
 	Assignee    *users.User
 	Labels      []labels.Label `gorm:"many2many:issue_labels"`
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ParentID    *uint
+	Parent      *Issue  `gorm:"foreignKey:ParentID"`
+	Subtasks    []Issue `gorm:"foreignKey:ParentID"`
+	// Self-referential many2many over issue_relations:
+	// DependsOn = issues this one is blocked by; Blocks = the reverse edge.
+	DependsOn []Issue `gorm:"many2many:issue_relations;joinForeignKey:issue_id;joinReferences:depends_on_id"`
+	Blocks    []Issue `gorm:"many2many:issue_relations;joinForeignKey:depends_on_id;joinReferences:issue_id"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 func (Issue) TableName() string { return "issues" }

@@ -37,6 +37,16 @@ export function IssueList({ issues, labels, selectedIndex, onSelect, onOpen }: P
           <span className="issue-key">{issue.key}</span>
           <StatusIcon status={issue.status} />
           <span className="issue-title">{issue.title}</span>
+          {issue.depends_on.some((d) => d.status !== "done" && d.status !== "canceled") && (
+            <span className="blocked-chip" title={`Blocked by ${issue.depends_on.map((d) => d.key).join(", ")}`}>
+              ⊘ blocked
+            </span>
+          )}
+          {issue.subtasks.length > 0 && (
+            <span className="sub-count-chip" title={`${issue.subtasks.length} subtasks`}>
+              {issue.subtasks.length} sub
+            </span>
+          )}
           <span className="issue-labels">
             {issue.labels.map((name) => (
               <LabelChip key={name} name={name} labels={labels} />

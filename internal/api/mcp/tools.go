@@ -102,6 +102,15 @@ var toolDefinitions = []toolDefinition{
 					"items":       map[string]any{"type": "string"},
 					"description": "Label names; replaces the issue's current labels. Unknown labels are created.",
 				},
+				"parent": map[string]any{
+					"type":        "string",
+					"description": "Parent issue key to make this a subtask, e.g. 'TD-3'. Pass an empty string to detach.",
+				},
+				"depends_on": map[string]any{
+					"type":        "array",
+					"items":       map[string]any{"type": "string"},
+					"description": "Issue keys this issue is blocked by; replaces the current set. Pass [] to clear.",
+				},
 			},
 		},
 	},
@@ -144,7 +153,7 @@ var toolDefinitions = []toolDefinition{
 	},
 	{
 		Name:        "taskdock_get_next_task",
-		Description: "Get the highest-priority unstarted issue (status backlog or todo) assigned to a user. Defaults to 'claude' — call this to find out what to work on next.",
+		Description: "Get the highest-priority unstarted issue (status backlog or todo) assigned to a user, skipping issues blocked by unfinished dependencies. Defaults to 'claude' — call this to find out what to work on next.",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

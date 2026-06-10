@@ -103,7 +103,29 @@ func (s *Service) getIssue(args map[string]any) (string, bool) {
 	if len(issue.Labels) > 0 {
 		fmt.Fprintf(&b, "- **Labels:** %s\n", strings.Join(issue.Labels, ", "))
 	}
+	if issue.Parent != nil {
+		fmt.Fprintf(&b, "- **Parent:** [%s] %s (%s)\n", issue.Parent.Key, issue.Parent.Title, issue.Parent.Status)
+	}
 	fmt.Fprintf(&b, "- **Created:** %s | **Updated:** %s\n", issue.CreatedAt.Format("2006-01-02 15:04"), issue.UpdatedAt.Format("2006-01-02 15:04"))
+
+	if len(issue.DependsOn) > 0 {
+		b.WriteString("\n## Blocked by\n\n")
+		for _, ref := range issue.DependsOn {
+			fmt.Fprintf(&b, "- [%s] %s (%s)\n", ref.Key, ref.Title, ref.Status)
+		}
+	}
+	if len(issue.Blocks) > 0 {
+		b.WriteString("\n## Blocks\n\n")
+		for _, ref := range issue.Blocks {
+			fmt.Fprintf(&b, "- [%s] %s (%s)\n", ref.Key, ref.Title, ref.Status)
+		}
+	}
+	if len(issue.Subtasks) > 0 {
+		fmt.Fprintf(&b, "\n## Subtasks (%d)\n\n", len(issue.Subtasks))
+		for _, ref := range issue.Subtasks {
+			fmt.Fprintf(&b, "- [%s] %s (%s)\n", ref.Key, ref.Title, ref.Status)
+		}
+	}
 
 	if issue.Description != "" {
 		fmt.Fprintf(&b, "\n## Description\n\n%s\n", issue.Description)
@@ -149,6 +171,14 @@ func (s *Service) saveIssue(args map[string]any) (string, bool) {
 			labelNames := argStringSlice(v)
 			update.Labels = &labelNames
 		}
+		if v, ok := args["parent"]; ok {
+			str := fmt.Sprint(v)
+			update.Parent = &str
+		}
+		if v, ok := args["depends_on"]; ok {
+			depKeys := argStringSlice(v)
+			update.DependsOn = &depKeys
+		}
 
 		issue, err := s.issues.Update(key, update)
 		if err != nil {
@@ -165,9 +195,13 @@ func (s *Service) saveIssue(args map[string]any) (string, bool) {
 		Status:      argString(args, "status"),
 		Priority:    argString(args, "priority"),
 		Assignee:    argString(args, "assignee"),
+		Parent:      argString(args, "parent"),
 	}
 	if v, ok := args["labels"]; ok {
 		create.Labels = argStringSlice(v)
+	}
+	if v, ok := args["depends_on"]; ok {
+		create.DependsOn = argStringSlice(v)
 	}
 	if create.Project == "" || create.Title == "" {
 		return "'project' and 'title' are required to create an issue", true

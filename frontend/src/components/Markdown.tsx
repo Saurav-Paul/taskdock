@@ -1,5 +1,5 @@
 // Tiny markdown renderer for read-only contexts (comments).
-// Supports headings, bold, italic, inline code, code blocks, links, lists.
+// Supports headings, bold, italic, inline code, code blocks, links, images, lists.
 
 function escapeHtml(s: string): string {
   return s
@@ -11,6 +11,7 @@ function escapeHtml(s: string): string {
 
 function inline(s: string): string {
   return s
+    .replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, '<img src="$2" alt="$1" />')
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|\W)\*([^*]+)\*/g, "$1<em>$2</em>")
