@@ -66,6 +66,17 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
   );
   const [copied, setCopied] = useState<"key" | "branch" | "link" | null>(null);
   const copiedTimer = useRef<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Re-fetch this issue + its comments in place, and the list behind it.
+  function refresh() {
+    setRefreshing(true);
+    Promise.allSettled([
+      getIssue(issue.key).then(setIssue),
+      getComments(issue.key).then(setComments),
+    ]).finally(() => setRefreshing(false));
+    onChanged();
+  }
 
   useEffect(() => {
     setIssue(initial);
@@ -279,6 +290,14 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
           </button>
           {copied && <span className="muted copied-note">Copied</span>}
           <span className="detail-header-spacer" />
+          <button
+            className="btn btn-small btn-icon refresh-btn"
+            onClick={refresh}
+            disabled={refreshing}
+            title="Refresh"
+          >
+            <RefreshIcon spinning={refreshing} />
+          </button>
           <button
             className="btn btn-small btn-icon"
             onClick={() => setFullscreen((f) => !f)}
@@ -641,6 +660,21 @@ function LinkIcon() {
         fill="none"
         stroke="currentColor"
         strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function RefreshIcon({ spinning }: { spinning: boolean }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" aria-label="Refresh" className={spinning ? "spinning" : ""}>
+      <path
+        d="M12 7 A5 5 0 1 1 9.5 2.7 M9.5 0.8 V3 H7.3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
