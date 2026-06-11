@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "taskdock-td": {
+      "type": "http",
+      "url": "http://localhost:8860/mcp/TD"
+    }
+  }
+}
