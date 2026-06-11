@@ -3,6 +3,12 @@ package mcp
 // MCP tool definitions — name, description, and JSON Schema for arguments.
 // Same shape as shelf's MCP_TOOL_DEFINITIONS.
 
+import "github.com/Saurav-Paul/taskdock/internal/api/issues"
+
+// statusEnum single-sources the status list from the issues domain, so a
+// new status only needs adding in one place.
+var statusEnum = issues.ValidStatuses
+
 type toolDefinition struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
@@ -29,9 +35,11 @@ var toolDefinitions = []toolDefinition{
 					"description": "Filter by project key, e.g. 'TD'",
 				},
 				"status": map[string]any{
-					"type":        "string",
-					"enum":        []string{"backlog", "todo", "in_progress", "done", "canceled"},
-					"description": "Filter by status",
+					"description": "Filter by status — a single value or an array (e.g. [\"in_progress\", \"in_review\"] for everything active)",
+					"anyOf": []map[string]any{
+						{"type": "string", "enum": statusEnum},
+						{"type": "array", "items": map[string]any{"type": "string", "enum": statusEnum}},
+					},
 				},
 				"assignee": map[string]any{
 					"type":        "string",
@@ -87,7 +95,7 @@ var toolDefinitions = []toolDefinition{
 				},
 				"status": map[string]any{
 					"type": "string",
-					"enum": []string{"backlog", "todo", "in_progress", "done", "canceled"},
+					"enum": statusEnum,
 				},
 				"priority": map[string]any{
 					"type": "string",

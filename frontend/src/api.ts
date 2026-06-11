@@ -1,16 +1,19 @@
-export type Status = "backlog" | "todo" | "in_progress" | "done" | "canceled";
+export type Status = "backlog" | "todo" | "in_progress" | "in_review" | "done" | "canceled";
 export type Priority = "none" | "low" | "medium" | "high" | "urgent";
 
-export const STATUSES: Status[] = ["backlog", "todo", "in_progress", "done", "canceled"];
 export const PRIORITIES: Priority[] = ["none", "low", "medium", "high", "urgent"];
 
+/** Workflow-ordered — UIs iterate this map (via STATUSES) for status lists. */
 export const STATUS_LABELS: Record<Status, string> = {
   backlog: "Backlog",
   todo: "Todo",
   in_progress: "In Progress",
+  in_review: "In Review",
   done: "Done",
   canceled: "Canceled",
 };
+
+export const STATUSES = Object.keys(STATUS_LABELS) as Status[];
 
 export const PRIORITY_LABELS: Record<Priority, string> = {
   none: "No priority",
@@ -84,6 +87,10 @@ export interface Issue {
   branch: string;
   created_at: string;
   updated_at: string;
+  /** Set on the first transition into in_progress/in_review; absent before. */
+  started_at?: string;
+  /** Set on the first transition into done/canceled; absent before. */
+  completed_at?: string;
 }
 
 export interface Comment {

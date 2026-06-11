@@ -120,9 +120,20 @@ func (s *Service) listProjects() (string, bool) {
 }
 
 func (s *Service) listIssues(args map[string]any) (string, bool) {
+	// status accepts a single value or an array of values.
+	var statuses []string
+	switch v := args["status"].(type) {
+	case string:
+		if v != "" {
+			statuses = []string{v}
+		}
+	case []any:
+		statuses = argStringSlice(v)
+	}
+
 	filters := issues.ListFilters{
 		Project:  argString(args, "project"),
-		Status:   argString(args, "status"),
+		Statuses: statuses,
 		Assignee: argString(args, "assignee"),
 		Query:    argString(args, "query"),
 		Limit:    argInt(args, "limit", 25),
@@ -169,6 +180,15 @@ func (s *Service) getIssue(args map[string]any) ([]map[string]any, bool) {
 	}
 	fmt.Fprintf(&b, "- **Branch:** %s\n", issue.Branch)
 	fmt.Fprintf(&b, "- **Created:** %s | **Updated:** %s (UTC)\n", issue.CreatedAt.UTC().Format("2006-01-02 15:04"), issue.UpdatedAt.UTC().Format("2006-01-02 15:04"))
+	if issue.StartedAt != nil {
+		fmt.Fprintf(&b, "- **Started:** %s (UTC)", issue.StartedAt.UTC().Format("2006-01-02 15:04"))
+		if issue.CompletedAt != nil {
+			fmt.Fprintf(&b, " | **Completed:** %s (UTC)", issue.CompletedAt.UTC().Format("2006-01-02 15:04"))
+		}
+		b.WriteString("\n")
+	} else if issue.CompletedAt != nil {
+		fmt.Fprintf(&b, "- **Completed:** %s (UTC)\n", issue.CompletedAt.UTC().Format("2006-01-02 15:04"))
+	}
 
 	if len(issue.Links) > 0 {
 		b.WriteString("\n## Links\n\n")

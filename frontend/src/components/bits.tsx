@@ -4,6 +4,7 @@ export const STATUS_COLORS: Record<Status, string> = {
   backlog: "#62666d",
   todo: "#8a8f98",
   in_progress: "#f2c94c",
+  in_review: "#26b5ce",
   done: "#5e6ad2",
   canceled: "#62666d",
 };
@@ -28,6 +29,13 @@ export function StatusIcon({ status }: { status: Status }) {
         <svg className="status-icon" width="14" height="14" viewBox="0 0 14 14" aria-label="In Progress">
           <circle cx="7" cy="7" r="5.5" fill="none" stroke={c} strokeWidth="1.5" />
           <path d="M7 3.5 A3.5 3.5 0 0 1 7 10.5 Z" fill={c} />
+        </svg>
+      );
+    case "in_review":
+      return (
+        <svg className="status-icon" width="14" height="14" viewBox="0 0 14 14" aria-label="In Review">
+          <circle cx="7" cy="7" r="5.5" fill="none" stroke={c} strokeWidth="1.5" />
+          <path d="M7 3.5 A3.5 3.5 0 1 1 3.5 7 L7 7 Z" fill={c} />
         </svg>
       );
     case "done":

@@ -4,6 +4,7 @@ package issues
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/Saurav-Paul/taskdock/internal/api/labels"
 	"github.com/Saurav-Paul/taskdock/internal/api/projects"
@@ -89,6 +90,16 @@ func (s *Service) Create(req IssueCreate) (*IssueResponse, error) {
 		Priority:    priority,
 	}
 
+	// Issues created directly in a working/terminal state get stamped too
+	// (e.g. importing already-done issues from another tracker).
+	now := time.Now().UTC()
+	switch status {
+	case "in_progress", "in_review":
+		issue.StartedAt = &now
+	case "done", "canceled":
+		issue.CompletedAt = &now
+	}
+
 	if req.Assignee != "" {
 		user, err := s.users.GetByName(req.Assignee)
 		if err != nil {
@@ -155,6 +166,21 @@ func (s *Service) Update(key string, req IssueUpdate) (*IssueResponse, error) {
 			return nil, fmt.Errorf("invalid status: %s (valid: %v)", *req.Status, ValidStatuses)
 		}
 		updates["status"] = *req.Status
+
+		// Cycle-time stamps: first transition into a working state sets
+		// started_at, first transition into a terminal state sets
+		// completed_at. Neither is ever overwritten.
+		now := time.Now().UTC()
+		switch *req.Status {
+		case "in_progress", "in_review":
+			if issue.StartedAt == nil {
+				updates["started_at"] = now
+			}
+		case "done", "canceled":
+			if issue.CompletedAt == nil {
+				updates["completed_at"] = now
+			}
+		}
 	}
 	if req.Priority != nil {
 		if !IsValidPriority(*req.Priority) {

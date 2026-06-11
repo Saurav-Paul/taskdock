@@ -3,8 +3,10 @@ package issues
 // HTTP route handlers for the issues API.
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
@@ -44,9 +46,26 @@ func (h *Handler) list(c echo.Context) error {
 		limit, _ = strconv.Atoi(raw)
 	}
 
+	// status accepts one value or a comma-separated list:
+	// ?status=in_progress,in_review
+	var statuses []string
+	if raw := c.QueryParam("status"); raw != "" {
+		for _, s := range strings.Split(raw, ",") {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				continue
+			}
+			if !IsValidStatus(s) {
+				return echo.NewHTTPError(http.StatusBadRequest,
+					fmt.Sprintf("invalid status: %s (valid: %v)", s, ValidStatuses))
+			}
+			statuses = append(statuses, s)
+		}
+	}
+
 	filters := ListFilters{
 		Project:  c.QueryParam("project"),
-		Status:   c.QueryParam("status"),
+		Statuses: statuses,
 		Assignee: c.QueryParam("assignee"),
 		Query:    c.QueryParam("q"),
 		Limit:    limit,

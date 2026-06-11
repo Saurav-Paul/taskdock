@@ -39,10 +39,10 @@ type IssueUpdate struct {
 
 // ListFilters are the query parameters for GET /api/issues.
 type ListFilters struct {
-	Project  string // project key
-	Status   string
-	Assignee string // user handle
-	Query    string // substring match on title/description
+	Project  string   // project key
+	Statuses []string // one or more statuses (e.g. active = in_progress + in_review)
+	Assignee string   // user handle
+	Query    string   // substring match on title/description
 	Limit    int
 }
 
@@ -71,6 +71,8 @@ type IssueResponse struct {
 	DependsOn   []IssueRef `json:"depends_on"`
 	Blocks      []IssueRef `json:"blocks"`
 	Links       []Link     `json:"links"`
+	StartedAt   *time.Time `json:"started_at,omitempty"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
@@ -92,6 +94,8 @@ func ToResponse(i *Issue) IssueResponse {
 		DependsOn:   toRefs(i.DependsOn),
 		Blocks:      toRefs(i.Blocks),
 		Links:       append([]Link{}, i.Links...),
+		StartedAt:   i.StartedAt,
+		CompletedAt: i.CompletedAt,
 		CreatedAt:   i.CreatedAt,
 		UpdatedAt:   i.UpdatedAt,
 	}

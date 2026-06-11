@@ -541,6 +541,16 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
             <PropRow label="Updated">
               <span className="muted">{relativeTime(issue.updated_at)}</span>
             </PropRow>
+            {issue.started_at && (
+              <PropRow label="Started">
+                <span className="muted">{relativeTime(issue.started_at)}</span>
+              </PropRow>
+            )}
+            {issue.completed_at && (
+              <PropRow label="Completed">
+                <span className="muted">{relativeTime(issue.completed_at)}</span>
+              </PropRow>
+            )}
           </div>
         </div>
       </div>

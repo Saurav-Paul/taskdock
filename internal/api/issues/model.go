@@ -13,7 +13,7 @@ import (
 
 // Valid status and priority values — mirror the CHECK constraints in the schema.
 var (
-	ValidStatuses  = []string{"backlog", "todo", "in_progress", "done", "canceled"}
+	ValidStatuses   = []string{"backlog", "todo", "in_progress", "in_review", "done", "canceled"}
 	ValidPriorities = []string{"none", "low", "medium", "high", "urgent"}
 )
 
@@ -38,8 +38,12 @@ type Issue struct {
 	DependsOn []Issue `gorm:"many2many:issue_relations;joinForeignKey:issue_id;joinReferences:depends_on_id"`
 	Blocks    []Issue `gorm:"many2many:issue_relations;joinForeignKey:depends_on_id;joinReferences:issue_id"`
 	Links     []Link  `gorm:"foreignKey:IssueID"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	// Stamped on the first transition into in_progress / done|canceled —
+	// cycle-time visibility, never cleared or overwritten.
+	StartedAt   *time.Time
+	CompletedAt *time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 func (Issue) TableName() string { return "issues" }

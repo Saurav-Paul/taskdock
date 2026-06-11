@@ -43,8 +43,8 @@ func (r *Repository) List(f ListFilters) ([]Issue, error) {
 	if f.Project != "" {
 		q = q.Where("projects.key = ?", strings.ToUpper(f.Project))
 	}
-	if f.Status != "" {
-		q = q.Where("issues.status = ?", f.Status)
+	if len(f.Statuses) > 0 {
+		q = q.Where("issues.status IN ?", f.Statuses)
 	}
 	if f.Assignee != "" {
 		q = q.Joins("JOIN users ON users.id = issues.assignee_id").

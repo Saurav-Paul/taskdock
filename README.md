@@ -23,8 +23,10 @@ Issue trackers are built for teams; taskdock is built for *you and your agents*:
 ### Issues, Linear-style
 
 - Projects with **per-project issue keys** (`AUR-12`), statuses
-  (`backlog → todo → in progress → done / canceled`), five priority levels,
-  labels, and assignees
+  (`backlog → todo → in progress → in review → done / canceled`), five
+  priority levels, labels, and assignees
+- **Cycle-time stamps** — `started_at` / `completed_at` set automatically on
+  the first transition into a working / terminal status
 - **Markdown everywhere** — descriptions and comments use a Tiptap editor with
   full markdown round-tripping
 - **Paste images** straight into the editor — stored locally, rendered inline
@@ -54,7 +56,7 @@ claude mcp add --transport http taskdock http://localhost:8860/mcp
 |---|---|
 | `taskdock_get_next_task` | Highest-priority open issue for an assignee — **skips blocked issues** |
 | `taskdock_get_issue` | Full issue + comments as markdown, **with pasted images as real image blocks the model can see** |
-| `taskdock_list_issues` | Filter by project / status / assignee / text |
+| `taskdock_list_issues` | Filter by project / status (single or array, e.g. `["in_progress", "in_review"]`) / assignee / text |
 | `taskdock_save_issue` | Create or update — title, status, priority, labels, parent, dependencies |
 | `taskdock_save_comment` | Log progress on a ticket (default author: `claude`) |
 | `taskdock_save_link` | Attach a URL — e.g. the PR an agent just opened for the ticket |
