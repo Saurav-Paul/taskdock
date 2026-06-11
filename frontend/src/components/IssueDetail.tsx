@@ -15,7 +15,7 @@ import {
   STATUS_LABELS,
   updateIssue,
 } from "../api";
-import { Avatar, daysUntilDue, isClosed, relativeTime, StatusIcon, STATUS_COLORS } from "./bits";
+import { AssigneeOptions, Avatar, daysUntilDue, isClosed, relativeTime, StatusIcon, STATUS_COLORS } from "./bits";
 import { Markdown } from "./Markdown";
 import { MarkdownEditor } from "./MarkdownEditor";
 
@@ -256,6 +256,10 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
     }
   }
 
+  // Runner card data: only when the assignee resolves to a kind=runner user.
+  const assignedUser = issue.assignee ? users.find((u) => u.name === issue.assignee) : undefined;
+  const assignedRunner = assignedUser?.kind === "runner" ? assignedUser : undefined;
+
   const subtasksDone = issue.subtasks.filter((s) => s.status === "done").length;
   const overdue = !!issue.due_date && daysUntilDue(issue.due_date) <= 0 && !isClosed(issue.status);
   // The server-provided branch is authoritative (it includes the configured
@@ -448,13 +452,31 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
             <PropRow label="Assignee">
               <select value={issue.assignee ?? ""} onChange={(e) => void patch({ assignee: e.target.value })}>
                 <option value="">Unassigned</option>
-                {users.map((u) => (
-                  <option key={u.name} value={u.name}>
-                    {u.display_name}
-                  </option>
-                ))}
+                <AssigneeOptions users={users} />
               </select>
             </PropRow>
+            {assignedRunner && (
+              <div className={`runner-card ${assignedRunner.online ? "" : "offline"}`}>
+                <div className="runner-card-head">
+                  <span className={`runner-dot ${assignedRunner.online ? "on" : "off"}`} />
+                  <span className="runner-card-name">{assignedRunner.display_name}</span>
+                  {!assignedRunner.online && (
+                    <span className="runner-offline-note">runner offline</span>
+                  )}
+                </div>
+                {assignedRunner.path && (
+                  <div className="runner-card-path" title={assignedRunner.path}>
+                    {assignedRunner.path}
+                  </div>
+                )}
+                {assignedRunner.hostname && (
+                  <div className="muted">{assignedRunner.hostname}</div>
+                )}
+                {issue.status === "in_progress" && issue.started_at && (
+                  <div className="muted">working since {relativeTime(issue.started_at)}</div>
+                )}
+              </div>
+            )}
             <PropRow label="Blocked by">
               <div className="relation-list">
                 {issue.depends_on.map((r) => (

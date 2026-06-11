@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import type { Issue, Label, Status } from "../api";
+import { useEffect, useMemo, useRef } from "react";
+import type { Issue, Label, Status, User } from "../api";
 import { STATUS_LABELS } from "../api";
 import type { IssueGroup } from "../grouping";
 import { Avatar, daysUntilDue, formatDueDate, isClosed, LabelChip, PriorityIcon, StatusIcon } from "./bits";
@@ -9,6 +9,7 @@ interface Props {
   collapsed: ReadonlySet<Status>;
   onToggleGroup: (status: Status) => void;
   labels: Label[];
+  users: User[];
   /** Index into the visible (non-collapsed) issues, in display order. */
   selectedIndex: number;
   onSelect: (index: number) => void;
@@ -53,11 +54,13 @@ export function IssueList({
   collapsed,
   onToggleGroup,
   labels,
+  users,
   selectedIndex,
   onSelect,
   onOpen,
 }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
+  const userByName = useMemo(() => new Map(users.map((u) => [u.name, u])), [users]);
 
   // Keep the keyboard-selected row in view.
   useEffect(() => {
@@ -92,6 +95,12 @@ export function IssueList({
             {!isCollapsed &&
               group.issues.map((issue) => {
                 const i = visibleIndex++;
+                // Flag actionable work assigned to a runner that isn't heartbeating.
+                const assignedUser = issue.assignee ? userByName.get(issue.assignee) : undefined;
+                const runnerOffline =
+                  assignedUser?.kind === "runner" &&
+                  !assignedUser.online &&
+                  (issue.status === "todo" || issue.status === "in_progress");
                 return (
                   <div
                     key={issue.key}
@@ -110,6 +119,14 @@ export function IssueList({
                         title={`Blocked by ${issue.depends_on.map((d) => d.key).join(", ")}`}
                       >
                         ⊘ blocked
+                      </span>
+                    )}
+                    {runnerOffline && (
+                      <span
+                        className="runner-offline-chip"
+                        title={`Runner ${issue.assignee} is offline`}
+                      >
+                        ○ runner offline
                       </span>
                     )}
                     {issue.subtasks.length > 0 && (

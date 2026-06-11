@@ -1,4 +1,36 @@
-import type { Label, Priority, Status } from "../api";
+import type { Label, Priority, Status, User } from "../api";
+
+/**
+ * Grouped <option>s for an assignee <select> — people first, then runners.
+ * Runner options carry a textual online dot (● online / ○ offline) since
+ * <option> can't render markup. Callers keep "Unassigned" as the first option.
+ */
+export function AssigneeOptions({ users }: { users: User[] }) {
+  const people = users.filter((u) => u.kind === "person");
+  const runners = users.filter((u) => u.kind === "runner");
+  return (
+    <>
+      {people.length > 0 && (
+        <optgroup label="People">
+          {people.map((u) => (
+            <option key={u.name} value={u.name}>
+              {u.display_name}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      {runners.length > 0 && (
+        <optgroup label="Runners">
+          {runners.map((u) => (
+            <option key={u.name} value={u.name}>
+              {u.online ? `● ${u.display_name}` : `○ ${u.display_name} (offline)`}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </>
+  );
+}
 
 export const STATUS_COLORS: Record<Status, string> = {
   backlog: "#62666d",

@@ -33,17 +33,31 @@ func NewTaskdock(baseURL string) *Taskdock {
 	return &Taskdock{baseURL: strings.TrimRight(baseURL, "/")}
 }
 
+// Register upserts this runner in taskdock — also the heartbeat.
+func (t *Taskdock) Register(name, path, hostname string) error {
+	reqBody, _ := json.Marshal(map[string]string{"name": name, "path": path, "hostname": hostname})
+	resp, err := httpClient.Post(t.baseURL+"/api/runners/register", "application/json", bytes.NewReader(reqBody))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("register: HTTP %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // NextTask returns the highest-priority unblocked todo/backlog issue
-// assigned to claude in the project, or nil when the queue is empty.
+// assigned to this runner (any project), or nil when the queue is empty.
 // Goes through MCP so priority/overdue/blocked ordering stays server-side.
-func (t *Taskdock) NextTask(project string) (*Task, error) {
+func (t *Taskdock) NextTask(assignee string) (*Task, error) {
 	reqBody, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
 		"method":  "tools/call",
 		"params": map[string]any{
 			"name":      "taskdock_get_next_task",
-			"arguments": map[string]any{"project": project},
+			"arguments": map[string]any{"assignee": assignee},
 		},
 	})
 

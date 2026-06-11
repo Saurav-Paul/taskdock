@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import type { Label, NewIssue, Priority, Project, Status, User } from "../api";
 import { createIssue, PRIORITIES, PRIORITY_LABELS, STATUSES, STATUS_LABELS } from "../api";
+import { AssigneeOptions } from "./bits";
 import { MarkdownEditor } from "./MarkdownEditor";
 
 interface Props {
@@ -109,11 +110,7 @@ export function CreateIssueModal({ projects, users, labels, defaultProject, onCl
           </select>
           <select value={assignee} onChange={(e) => setAssignee(e.target.value)}>
             <option value="">Unassigned</option>
-            {users.map((u) => (
-              <option key={u.name} value={u.name}>
-                {u.display_name}
-              </option>
-            ))}
+            <AssigneeOptions users={users} />
           </select>
           <input
             type="date"

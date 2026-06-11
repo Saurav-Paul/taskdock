@@ -53,35 +53,41 @@ fresh urgent one.
 Each project can have a `webhook_url`, POSTed `issue.created/updated/deleted`
 and `comment.created` events with full payloads.
 
-### The dispatcher: assign a ticket, a session starts
+### Runners: assign a ticket to a place
 
-`cmd/dispatcher` is a host-side daemon (it drives tmux, so it runs on your
-machine, not in Docker) that closes the loop:
-
-```
-assign to claude → webhook → dispatcher → tmux window running claude
-→ works the ticket → in_review → session exits → next queued ticket launches
-```
+A **runner** is a dispatcher process anchored to a path. Start one in any
+repo (or worktree) you want agents working in:
 
 ```bash
 go build -o bin/dispatcher ./cmd/dispatcher
-cp dispatcher.json.example dispatcher.json   # map project keys → repo paths
-./bin/dispatcher                              # or -dry-run to watch decisions
-# then point each project's webhook_url at http://host.docker.internal:9876/hook
+cd ~/your/repo && dispatcher .          # runner named after the folder
+dispatcher -name hotfix ~/your/repo     # or explicit name + path
 ```
 
-- Sessions are **interactive tmux windows** (named after the issue key, in a
-  `taskdock` tmux session): output streams live, questions are answerable,
-  takeover is always possible. Launched with `--permission-mode acceptEdits`.
-- One session per project; the queue drains serially in priority/dependency
+The runner registers itself with taskdock (heartbeat every 10s) and shows up
+as an **assignable identity** — the assignee dropdown groups People and
+Runners with live online dots. Assign a ticket to a runner and:
+
+```
+assign → runner polls and picks it up → tmux window (cwd = runner's path)
+→ claude works the ticket → in_review → window marked ✓ → next queued ticket
+```
+
+- **No config file, no webhooks, no ports** — runners poll, so they work
+  from any machine that can reach the taskdock URL (`-taskdock` /
+  `$TASKDOCK_URL`).
+- Sessions are **interactive tmux windows**: output streams live, questions
+  are answerable, takeover is always possible (`--permission-mode acceptEdits`).
+- One session per runner; its queue drains serially in priority/dependency
   order via `get_next_task`.
-- Failures are visible: a session that exits without moving its ticket gets a
-  comment + notification, and a 30-min cooldown prevents relaunch loops
-  (re-assigning retries immediately).
-- macOS notifications on launch/finish/stuck; optional `ntfy_url` for phones.
-- Pause everything with `touch ~/.taskdock-dispatcher-pause`.
-- Each mapped repo should have the project-scoped MCP server configured
-  (grab `.mcp.json` from the **MCP** button) so sessions can reach the tracker.
+- The issue page shows a **runner card** (path, host, online state); the
+  header **runners panel** lists every runner and what it's working on; an
+  offline runner with active tickets is flagged in the list.
+- Failures stay visible: a session that exits without moving its ticket gets
+  a comment + notification + 30-min cooldown (re-assign to retry).
+- Pause all pickups: `touch ~/.taskdock-dispatcher-pause`.
+- Each runner's repo needs the project-scoped MCP config (grab `.mcp.json`
+  from the **MCP** button) so sessions can reach the tracker.
 
 ![Comments and relations](docs/screenshots/issue-comments.png)
 

@@ -10,11 +10,11 @@ import (
 
 	"github.com/Saurav-Paul/taskdock/internal/api/attachments"
 	"github.com/Saurav-Paul/taskdock/internal/api/comments"
-	"github.com/Saurav-Paul/taskdock/internal/api/dispatcherproxy"
 	"github.com/Saurav-Paul/taskdock/internal/api/issues"
 	"github.com/Saurav-Paul/taskdock/internal/api/labels"
 	"github.com/Saurav-Paul/taskdock/internal/api/mcp"
 	"github.com/Saurav-Paul/taskdock/internal/api/projects"
+	"github.com/Saurav-Paul/taskdock/internal/api/runners"
 	"github.com/Saurav-Paul/taskdock/internal/api/users"
 	"github.com/Saurav-Paul/taskdock/internal/config"
 	"github.com/Saurav-Paul/taskdock/internal/database"
@@ -47,6 +47,7 @@ func main() {
 	// Register() wires repo → service → handler and returns the service
 	// so dependent domains can use it.
 	userService := users.Register(e.Group("/api/users"), db)
+	runners.Register(e.Group("/api/runners"), db, userService)
 	projectService := projects.Register(e.Group("/api/projects"), db)
 	labelService := labels.Register(e.Group("/api/labels"), db)
 
@@ -58,8 +59,6 @@ func main() {
 	attachments.Register(e.Group("/api/attachments"), cfg)
 	e.Static("/files", cfg.FilesDir)
 
-	// --- Dispatcher status/log proxy (UI visibility for the host daemon) ---
-	dispatcherproxy.Register(e.Group("/api/dispatcher"), cfg.DispatcherURL)
 
 	// --- MCP endpoint (POST /mcp) ---
 	mcpService := mcp.NewService(projectService, issueService, commentService, cfg.FilesDir)

@@ -9,5 +9,4 @@ services:
       - DATA_DIR=/data
       - TASKDOCK_PORT=8860
       - TASKDOCK_BRANCH_PREFIX=${TASKDOCK_BRANCH_PREFIX:-feature/}
-      - TASKDOCK_DISPATCHER_URL=http://host.docker.internal:9876
     restart: unless-stopped

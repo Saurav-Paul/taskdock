@@ -9,12 +9,29 @@ import (
 	"gorm.io/gorm"
 )
 
-// User is the GORM model for the "users" table.
+// User is the GORM model for the "users" table. Runners (dispatcher
+// processes) register as users with kind=runner so they are assignable
+// like anyone else; their extra columns describe where they run.
 type User struct {
-	ID          uint      `gorm:"primaryKey" json:"id"`
-	Name        string    `gorm:"uniqueIndex;not null" json:"name"`
-	DisplayName string    `gorm:"not null;default:''" json:"display_name"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          uint       `gorm:"primaryKey" json:"id"`
+	Name        string     `gorm:"uniqueIndex;not null" json:"name"`
+	DisplayName string     `gorm:"not null;default:''" json:"display_name"`
+	Kind        string     `gorm:"not null;default:'person'" json:"kind"` // person | runner
+	Path        string     `gorm:"not null;default:''" json:"path,omitempty"`
+	Hostname    string     `gorm:"not null;default:''" json:"hostname,omitempty"`
+	LastSeen    *time.Time `json:"last_seen,omitempty"`
+	// Online is computed, not stored: runner with a fresh heartbeat.
+	Online    bool      `gorm:"-" json:"online"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// runnerOnlineWindow is how fresh a heartbeat must be to count as online.
+const runnerOnlineWindow = 30 * time.Second
+
+// ComputeOnline fills the Online field from the heartbeat age.
+func (u *User) ComputeOnline() {
+	u.Online = u.Kind == "runner" && u.LastSeen != nil &&
+		time.Since(*u.LastSeen) < runnerOnlineWindow
 }
 
 func (User) TableName() string { return "users" }
@@ -31,11 +48,50 @@ type Service struct {
 	db *gorm.DB
 }
 
-// List returns all users ordered by id.
+// List returns all users ordered by id, with runner online state computed.
 func (s *Service) List() ([]User, error) {
 	var users []User
-	err := s.db.Order("id").Find(&users).Error
-	return users, err
+	if err := s.db.Order("id").Find(&users).Error; err != nil {
+		return nil, err
+	}
+	for i := range users {
+		users[i].ComputeOnline()
+	}
+	return users, nil
+}
+
+// RegisterRunner upserts a runner user and stamps its heartbeat.
+// Registration and heartbeat are the same call.
+func (s *Service) RegisterRunner(name, path, hostname string) (*User, error) {
+	now := time.Now().UTC()
+
+	var user User
+	err := s.db.Where("name = ?", name).First(&user).Error
+	if err != nil {
+		user = User{Name: name, DisplayName: name, Kind: "runner", Path: path, Hostname: hostname, LastSeen: &now}
+		if err := s.db.Create(&user).Error; err != nil {
+			return nil, err
+		}
+	} else {
+		updates := map[string]any{"kind": "runner", "path": path, "hostname": hostname, "last_seen": now}
+		if err := s.db.Model(&user).Updates(updates).Error; err != nil {
+			return nil, err
+		}
+	}
+	user.ComputeOnline()
+	return &user, nil
+}
+
+// Runners returns runner users only, online state computed.
+func (s *Service) Runners() ([]User, error) {
+	var runners []User
+	if err := s.db.Where("kind = 'runner'").Order("name").Find(&runners).Error; err != nil {
+		return nil, err
+	}
+	for i := range runners {
+		runners[i].ComputeOnline()
+	}
+	return runners, nil
 }
 
 // GetByName returns the user with the given handle, or an error if not found.

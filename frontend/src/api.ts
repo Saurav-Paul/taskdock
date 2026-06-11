@@ -51,6 +51,15 @@ export interface User {
   id: number;
   name: string;
   display_name: string;
+  kind: "person" | "runner";
+  /** Path the runner is anchored to; runners only. */
+  path?: string;
+  /** Host the runner reported; runners only. */
+  hostname?: string;
+  /** ISO timestamp of the last heartbeat; runners only. */
+  last_seen?: string;
+  /** Server-computed from heartbeat freshness. */
+  online: boolean;
 }
 
 export interface Label {
@@ -63,6 +72,11 @@ export interface IssueRef {
   key: string;
   title: string;
   status: Status;
+}
+
+export interface Runner extends User {
+  /** The issue the runner is currently working on, when any. */
+  current_issue?: IssueRef;
 }
 
 export interface IssueLink {
@@ -165,6 +179,7 @@ export const updateProject = (key: string, patch: ProjectPatch) =>
 export const deleteProject = (key: string) =>
   request<void>(`/api/projects/${key}`, { method: "DELETE" });
 export const getUsers = () => request<User[]>("/api/users");
+export const getRunners = () => request<Runner[]>("/api/runners");
 export const getLabels = () => request<Label[]>("/api/labels");
 
 export function getIssues(filter: IssueFilter = {}): Promise<Issue[]> {
@@ -205,28 +220,6 @@ export const addLink = (key: string, url: string, title?: string) =>
 
 export const deleteLink = (key: string, id: number) =>
   request<void>(`/api/issues/${key}/links/${id}`, { method: "DELETE" });
-
-export interface DispatcherSession {
-  project: string;
-  key: string;
-  pane_id: string;
-}
-
-export interface DispatcherStatus {
-  running: boolean;
-  dry_run?: boolean;
-  paused?: boolean;
-  /** ISO timestamp; present only when running. */
-  started_at?: string;
-  sessions?: DispatcherSession[];
-  projects?: string[];
-}
-
-export const getDispatcherStatus = () =>
-  request<DispatcherStatus>("/api/dispatcher/status");
-
-export const getDispatcherLog = () =>
-  request<{ lines: string[] }>("/api/dispatcher/log");
 
 export interface Attachment {
   url: string;

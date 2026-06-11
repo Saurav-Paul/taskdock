@@ -1,326 +1,222 @@
+// Package dispatcher implements a taskdock RUNNER: a host-side process
+// anchored to one path. It registers itself as an assignable identity,
+// polls for tickets assigned to it, and works each one in an interactive
+// tmux window (cwd = its path). Run one per repo/worktree you want agents
+// working in:
+//
+//	dispatcher .                # runner named after the folder
+//	dispatcher -name fix ~/repo # explicit name and path
 package dispatcher
 
-// Core reactor: webhook event in → filter → launch session → observe →
-// drain the queue. One session per project at a time; everything else is
-// logged and picked up by the drain when the current session exits.
-
 import (
-	"encoding/json"
 	"log"
-	"net/http"
-	"sync"
+	"os"
 	"time"
 )
 
 const (
-	monitorInterval = 5 * time.Second
-	waitingInterval = 2 * time.Minute
-	waitingAfter    = 10 * time.Minute
+	heartbeatInterval = 10 * time.Second
+	pollInterval      = 5 * time.Second
+	monitorInterval   = 5 * time.Second
+	waitingInterval   = 2 * time.Minute
+	waitingAfter      = 10 * time.Minute
 	// A ticket whose session died without progress is not auto-relaunched
-	// for this long — re-assigning it in taskdock bypasses the cooldown.
+	// for this long — re-assigning it in taskdock resets the runner's view.
 	failureCooldown = 30 * time.Minute
 )
 
-// session tracks one running tmux window.
-type session struct {
-	project     string
-	key         string // issue being worked
-	paneID      string
-	startStatus string // issue status at launch (for the waiting detector)
-	lastContent string // pane content hash from the previous waiting sweep
-	lastChange  time.Time
-	warned      bool // waiting notification sent
+// Options configure a runner (from flags, no config file).
+type Options struct {
+	TaskdockURL string
+	Name        string // runner identity, defaults to the folder basename
+	Path        string // absolute path sessions run in
+	Hostname    string
+	Command     string // session command; kickoff prompt appended (stub-able for tests)
+	TmuxSession string
+	PauseFile   string
+	DryRun      bool
 }
 
-// Dispatcher holds the reactor state.
-type Dispatcher struct {
-	cfg      *Config
+// session tracks the one running tmux window (a runner is serial).
+type session struct {
+	key         string
+	paneID      string
+	startStatus string
+	lastContent string
+	lastChange  time.Time
+	warned      bool
+}
+
+// Runner is the dispatcher process state.
+type Runner struct {
+	opts     Options
 	taskdock *Taskdock
 	notifier *Notifier
-	dryRun   bool
 
-	mu       sync.Mutex
-	sessions map[string]*session  // project key → running session
-	failed   map[string]time.Time // issue key → when its session died without progress
+	current *session             // nil when idle
+	failed  map[string]time.Time // issue key → failure time (cooldown)
 }
 
-// New creates a dispatcher.
-func New(cfg *Config, dryRun bool) *Dispatcher {
-	return &Dispatcher{
-		cfg:      cfg,
-		taskdock: NewTaskdock(cfg.TaskdockURL),
-		notifier: NewNotifier(cfg.NtfyURL),
-		dryRun:   dryRun,
-		sessions: make(map[string]*session),
+// New creates a runner.
+func New(opts Options) *Runner {
+	return &Runner{
+		opts:     opts,
+		taskdock: NewTaskdock(opts.TaskdockURL),
+		notifier: NewNotifier(""),
 		failed:   make(map[string]time.Time),
 	}
 }
 
-// webhookEvent is the body taskdock POSTs.
-type webhookEvent struct {
-	Event string `json:"event"`
-	Data  struct {
-		Key      string `json:"key"`
-		Project  string `json:"project"`
-		Status   string `json:"status"`
-		Assignee string `json:"assignee"`
-	} `json:"data"`
+func (r *Runner) paused() bool {
+	_, err := os.Stat(r.opts.PauseFile)
+	return err == nil
 }
 
-// HandleWebhook is the POST /hook handler.
-func (d *Dispatcher) HandleWebhook(w http.ResponseWriter, r *http.Request) {
-	var ev webhookEvent
-	if err := json.NewDecoder(r.Body).Decode(&ev); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
-		return
+// Run is the runner's main loop: heartbeat, poll for work when idle,
+// watch the running session, nudge when it looks stuck. Single-threaded
+// by design — a runner works one ticket at a time.
+func (r *Runner) Run() error {
+	if err := r.register(); err != nil {
+		return err
 	}
-	w.WriteHeader(http.StatusOK)
+	log.Printf("runner %q online — path %s, taskdock %s, dry-run %v",
+		r.opts.Name, r.opts.Path, r.opts.TaskdockURL, r.opts.DryRun)
 
-	// Filter: only fresh assignments to claude in an unstarted status.
-	// claude's own transitions (in_progress, in_review, …) never match,
-	// so the dispatcher can't trigger off its own sessions' work.
-	switch {
-	case ev.Event != "issue.created" && ev.Event != "issue.updated":
-		return // comment.created etc — v1 ignores
-	case ev.Data.Assignee != "claude":
-		log.Printf("skip %s %s: assignee %q", ev.Event, ev.Data.Key, ev.Data.Assignee)
-		return
-	case ev.Data.Status != "todo" && ev.Data.Status != "backlog":
-		log.Printf("skip %s %s: status %q", ev.Event, ev.Data.Key, ev.Data.Status)
-		return
-	}
+	heartbeat := time.Tick(heartbeatInterval)
+	poll := time.Tick(pollInterval)
+	monitor := time.Tick(monitorInterval)
+	waiting := time.Tick(waitingInterval)
 
-	if _, mapped := d.cfg.Projects[ev.Data.Project]; !mapped {
-		log.Printf("skip %s: project %s not in config", ev.Data.Key, ev.Data.Project)
-		return
+	for {
+		select {
+		case <-heartbeat:
+			if err := r.register(); err != nil {
+				log.Printf("heartbeat failed: %v", err)
+			}
+		case <-poll:
+			if r.current == nil && !r.paused() {
+				r.pickUpWork()
+			}
+		case <-monitor:
+			if r.current != nil {
+				r.checkSession()
+			}
+		case <-waiting:
+			if r.current != nil {
+				r.checkWaiting()
+			}
+		}
 	}
-	if d.cfg.Paused() {
-		log.Printf("skip %s: dispatcher paused (%s exists)", ev.Data.Key, d.cfg.PauseFile)
-		return
-	}
-
-	log.Printf("trigger: %s %s (project %s)", ev.Event, ev.Data.Key, ev.Data.Project)
-	// Explicit (re-)assignment clears any failure cooldown for the issue.
-	d.mu.Lock()
-	delete(d.failed, ev.Data.Key)
-	d.mu.Unlock()
-	go d.tryLaunch(ev.Data.Project)
 }
 
-// tryLaunch starts a session for the project's next task, unless one is
-// already running. The dispatcher (not the session) picks the ticket, so
-// it always knows which issue a window is working.
-func (d *Dispatcher) tryLaunch(project string) {
-	d.mu.Lock()
-	if _, running := d.sessions[project]; running {
-		d.mu.Unlock()
-		log.Printf("%s: session already running — queue will drain on exit", project)
-		return
-	}
-	// Reserve the slot before the (slow) network/tmux work.
-	d.sessions[project] = &session{project: project}
-	d.mu.Unlock()
+func (r *Runner) register() error {
+	return r.taskdock.Register(r.opts.Name, r.opts.Path, r.opts.Hostname)
+}
 
-	release := func() {
-		d.mu.Lock()
-		delete(d.sessions, project)
-		d.mu.Unlock()
-	}
-
-	task, err := d.taskdock.NextTask(project)
+// pickUpWork asks for the next unblocked ticket assigned to this runner
+// and launches a session for it.
+func (r *Runner) pickUpWork() {
+	task, err := r.taskdock.NextTask(r.opts.Name)
 	if err != nil {
-		log.Printf("%s: next-task failed: %v", project, err)
-		release()
+		log.Printf("next-task failed: %v", err)
 		return
 	}
 	if task == nil {
-		log.Printf("%s: queue empty", project)
-		release()
-		return
+		return // queue empty — stay idle, keep polling
 	}
 
-	// Don't loop on a ticket whose session just died without progress —
-	// next-task would hand us the same one forever.
-	d.mu.Lock()
-	failedAt, cooling := d.failed[task.Key]
-	d.mu.Unlock()
-	if cooling && time.Since(failedAt) < failureCooldown {
-		log.Printf("%s: %s failed %s ago — cooling down, not relaunching (re-assign to retry)",
-			project, task.Key, time.Since(failedAt).Round(time.Second))
-		release()
-		return
+	if failedAt, cooling := r.failed[task.Key]; cooling && time.Since(failedAt) < failureCooldown {
+		return // failed recently; re-assigning in taskdock clears this (new last assignment resets below)
 	}
 
-	if d.dryRun {
-		log.Printf("DRY-RUN %s: would launch session for %s (%s) in %s",
-			project, task.Key, task.Title, d.cfg.Projects[project].Repo)
-		release()
+	if r.opts.DryRun {
+		log.Printf("DRY-RUN: would launch session for %s (%s) in %s", task.Key, task.Title, r.opts.Path)
+		// Mark as failed so dry-run doesn't relog every poll tick.
+		r.failed[task.Key] = time.Now()
 		return
 	}
 
 	prompt := kickoffPrompt(task)
-	paneID, err := LaunchWindow(d.cfg.TmuxSession, task.Key, d.cfg.Projects[project].Repo, d.cfg.Command, prompt)
+	paneID, err := LaunchWindow(r.opts.TmuxSession, task.Key, r.opts.Path, r.opts.Command, prompt)
 	if err != nil {
-		log.Printf("%s: launch failed: %v", project, err)
-		d.notifier.Send("launch failed for " + task.Key + ": " + err.Error())
-		release()
+		log.Printf("launch failed for %s: %v", task.Key, err)
+		r.notifier.Send("launch failed for " + task.Key + ": " + err.Error())
+		r.failed[task.Key] = time.Now()
 		return
 	}
 
-	d.mu.Lock()
-	d.sessions[project] = &session{
-		project:     project,
-		key:         task.Key,
-		paneID:      paneID,
-		startStatus: task.Status,
-		lastChange:  time.Now(),
-	}
-	d.mu.Unlock()
-
-	log.Printf("%s: launched session for %s in tmux pane %s", project, task.Key, paneID)
-	d.notifier.Send("session started: " + task.Key + " — " + task.Title)
+	r.current = &session{key: task.Key, paneID: paneID, startStatus: task.Status, lastChange: time.Now()}
+	log.Printf("launched session for %s in tmux pane %s", task.Key, paneID)
+	r.notifier.Send("session started: " + task.Key + " — " + task.Title)
 }
 
-// Run starts the webhook server plus the monitor and waiting-detector
-// loops. Blocks.
-func (d *Dispatcher) Run() error {
-	go d.monitorLoop()
-	go d.waitingLoop()
+// checkSession watches for the two endings: the ticket reached
+// in_review/done (success — interactive sessions never exit on their own,
+// so ticket state is the signal; the window stays open, renamed ✓), or
+// the pane died (failure/abort).
+func (r *Runner) checkSession() {
+	s := r.current
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /hook", d.HandleWebhook)
-	mux.HandleFunc("GET /health", d.handleHealth)
-	mux.HandleFunc("GET /log", d.handleLog)
-
-	log.Printf("dispatcher listening on %s (taskdock: %s, dry-run: %v)", d.cfg.Listen, d.cfg.TaskdockURL, d.dryRun)
-	return http.ListenAndServe(d.cfg.Listen, mux)
-}
-
-// monitorLoop watches running sessions for two endings:
-//   - the ticket reached in_review/done — interactive claude sessions do
-//     NOT exit when finished (they wait at the input prompt), so ticket
-//     state is the success signal. The window stays open for inspection,
-//     renamed with a ✓.
-//   - the pane died — the failure/abort path (closed window, crash).
-func (d *Dispatcher) monitorLoop() {
-	for range time.Tick(monitorInterval) {
-		d.mu.Lock()
-		snapshot := make([]*session, 0, len(d.sessions))
-		for _, s := range d.sessions {
-			if s.paneID != "" {
-				snapshot = append(snapshot, s)
-			}
+	if !PaneAlive(s.paneID) {
+		r.current = nil
+		issue, err := r.taskdock.GetIssue(s.key)
+		if err == nil && (issue.Status == "in_review" || issue.Status == "done" || issue.Status == "canceled") {
+			log.Printf("%s: session closed, ticket %s", s.key, issue.Status)
+			return
 		}
-		d.mu.Unlock()
-
-		for _, s := range snapshot {
-			if !PaneAlive(s.paneID) {
-				d.release(s.project)
-				d.sessionFinished(s)
-				continue
-			}
-
-			issue, err := d.taskdock.GetIssue(s.key)
-			if err != nil {
-				continue
-			}
-			if issue.Status == "in_review" || issue.Status == "done" {
-				log.Printf("%s: ticket reached %s — session complete (window left open)", s.key, issue.Status)
-				MarkWindowDone(s.paneID, s.key)
-				d.release(s.project)
-				d.notifier.Send(s.key + " → " + issue.Status)
-				if !d.cfg.Paused() {
-					d.tryLaunch(s.project)
-				}
-			}
+		log.Printf("%s: session exited without a status change", s.key)
+		r.failed[s.key] = time.Now()
+		r.notifier.Send("⚠ " + s.key + " session ended without a status change")
+		if err := r.taskdock.Comment(s.key,
+			"runner "+r.opts.Name+": session ended without a status change — check the tmux window and re-assign to retry."); err != nil {
+			log.Printf("%s: stuck-comment failed: %v", s.key, err)
 		}
-	}
-}
-
-// release frees a project's session slot.
-func (d *Dispatcher) release(project string) {
-	d.mu.Lock()
-	delete(d.sessions, project)
-	d.mu.Unlock()
-}
-
-// sessionFinished handles a session whose tmux window closed (the lock is
-// already released by the caller).
-func (d *Dispatcher) sessionFinished(s *session) {
-	issue, err := d.taskdock.GetIssue(s.key)
-	if err != nil {
-		log.Printf("%s: post-exit issue fetch failed: %v", s.key, err)
-	} else {
-		switch issue.Status {
-		case "todo", "backlog", "in_progress":
-			// Session died without moving the ticket — make it visible
-			// and put the ticket on cooldown so the drain doesn't loop.
-			log.Printf("%s: session exited without a status change (still %s)", s.key, issue.Status)
-			d.mu.Lock()
-			d.failed[s.key] = time.Now()
-			d.mu.Unlock()
-			d.notifier.Send("⚠ " + s.key + " session ended without a status change")
-			if err := d.taskdock.Comment(s.key,
-				"dispatcher: session ended without a status change — check the tmux log and relaunch by re-assigning."); err != nil {
-				log.Printf("%s: stuck-comment failed: %v", s.key, err)
-			}
-		default:
-			log.Printf("%s: session finished, status %s", s.key, issue.Status)
-			d.notifier.Send(s.key + " → " + issue.Status)
-		}
-	}
-
-	// Drain: more assigned work in this project? Launch the next one.
-	if d.cfg.Paused() {
-		log.Printf("%s: paused — not draining queue", s.project)
 		return
 	}
-	d.tryLaunch(s.project)
-}
 
-// waitingLoop notifies (once per session) when a pane has been silent for
-// a while and its ticket hasn't moved — usually Claude waiting for input.
-func (d *Dispatcher) waitingLoop() {
-	for range time.Tick(waitingInterval) {
-		d.mu.Lock()
-		var candidates []*session
-		for _, s := range d.sessions {
-			if s.paneID != "" {
-				candidates = append(candidates, s)
-			}
-		}
-		d.mu.Unlock()
-
-		for _, s := range candidates {
-			content := PaneContent(s.paneID)
-			if content != s.lastContent {
-				s.lastContent = content
-				s.lastChange = time.Now()
-				s.warned = false
-				continue
-			}
-			if s.warned || time.Since(s.lastChange) < waitingAfter {
-				continue
-			}
-			issue, err := d.taskdock.GetIssue(s.key)
-			if err == nil && issue.Status != s.startStatus {
-				continue // ticket moved — it's working, just quiet
-			}
-			s.warned = true
-			log.Printf("%s: pane silent for %s — may be waiting for input", s.key, waitingAfter)
-			d.notifier.Send("⏸ " + s.key + " session may be waiting for input")
-		}
+	issue, err := r.taskdock.GetIssue(s.key)
+	if err != nil {
+		return
+	}
+	if issue.Status == "in_review" || issue.Status == "done" {
+		log.Printf("%s: ticket reached %s — session complete (window left open)", s.key, issue.Status)
+		MarkWindowDone(s.paneID, s.key)
+		r.notifier.Send(s.key + " → " + issue.Status)
+		r.current = nil // next poll tick picks up further queued work
 	}
 }
 
-// kickoffPrompt is what the session starts with — it works one specific
-// ticket, chosen by the dispatcher.
+// checkWaiting notifies once when the session pane has gone quiet without
+// the ticket moving — usually Claude waiting for an answer.
+func (r *Runner) checkWaiting() {
+	s := r.current
+
+	content := PaneContent(s.paneID)
+	if content != s.lastContent {
+		s.lastContent = content
+		s.lastChange = time.Now()
+		s.warned = false
+		return
+	}
+	if s.warned || time.Since(s.lastChange) < waitingAfter {
+		return
+	}
+	issue, err := r.taskdock.GetIssue(s.key)
+	if err == nil && issue.Status != s.startStatus {
+		return // moved at least once — working, just quiet
+	}
+	s.warned = true
+	log.Printf("%s: pane silent — may be waiting for input", s.key)
+	r.notifier.Send("⏸ " + s.key + " session may be waiting for input")
+}
+
+// kickoffPrompt starts the session on one specific ticket.
 func kickoffPrompt(task *Task) string {
 	return "You are working ticket " + task.Key + " from the taskdock tracker (connected via MCP). " +
 		"Steps: call taskdock_get_issue for " + task.Key + " and read it fully (description, comments, images). " +
-		"Set its status to in_progress. Create or check out the branch " + task.Branch + ". " +
+		"Set its status to in_progress. Create or check out the branch " + task.Branch + " unless the ticket says otherwise. " +
 		"Implement the ticket. Log meaningful progress and decisions with taskdock_save_comment. " +
 		"If you open a PR, attach it with taskdock_save_link. " +
-		"When the work is ready for review, set status to in_review and exit. " +
-		"If you are blocked, comment why and exit without changing the status further."
+		"When the work is ready for review, set status to in_review. " +
+		"If you are blocked, comment why and stop."
 }

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DispatcherStatus, Issue, IssuePatch, Label, Project, Status, User } from "./api";
+import type { Issue, IssuePatch, Label, Project, Runner, Status, User } from "./api";
 import {
-  getDispatcherStatus,
   getIssue,
   getIssues,
   getLabels,
   getProjects,
+  getRunners,
   getUsers,
   PRIORITIES,
   PRIORITY_LABELS,
@@ -17,10 +17,10 @@ import { flattenVisible, groupIssues } from "./grouping";
 import { CommandPalette, type PaletteCommand } from "./components/CommandPalette";
 import { CreateIssueModal } from "./components/CreateIssueModal";
 import { CreateProjectModal } from "./components/CreateProjectModal";
-import { DispatcherModal } from "./components/DispatcherModal";
 import { IssueDetail } from "./components/IssueDetail";
 import { IssueList } from "./components/IssueList";
 import { McpIcon, McpModal } from "./components/McpModal";
+import { RunnersModal } from "./components/RunnersModal";
 import { ProjectHeader } from "./components/ProjectHeader";
 import { Sidebar } from "./components/Sidebar";
 
@@ -149,23 +149,30 @@ export default function App() {
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
-  const [showDispatcher, setShowDispatcher] = useState(false);
+  const [showRunners, setShowRunners] = useState(false);
 
-  // ── Dispatcher status ───────────────────────────────
-  // Polled every 10s. Any fetch failure (daemon down, proxy 404 before the
-  // container redeploys, network error) just means "not running".
-  const [dispatcherStatus, setDispatcherStatus] = useState<DispatcherStatus>({ running: false });
+  // ── Runners ─────────────────────────────────────────
+  // Polled every 10s for the header dot; the modal polls faster while open.
+  // Users refresh at the same cadence so dropdown online states stay fresh.
+  // A runners fetch failure (backend down, network error) means "none online".
+  const [runners, setRunners] = useState<Runner[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    const poll = () =>
-      getDispatcherStatus()
-        .then((s) => {
-          if (!cancelled) setDispatcherStatus(s);
+    const poll = () => {
+      getRunners()
+        .then((r) => {
+          if (!cancelled) setRunners(r);
         })
         .catch(() => {
-          if (!cancelled) setDispatcherStatus({ running: false });
+          if (!cancelled) setRunners([]);
         });
+      getUsers()
+        .then((u) => {
+          if (!cancelled) setUsers(u);
+        })
+        .catch(() => {});
+    };
     void poll();
     const timer = window.setInterval(poll, 10_000);
     return () => {
@@ -327,8 +334,8 @@ export default function App() {
   }, [contextIssue, users, projects, issues, patchIssue, copyText]);
 
   // Keyboard shortcuts — read latest state via ref to keep a single stable listener.
-  const stateRef = useRef({ visibleIssues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp, showPalette, showDispatcher, refreshing });
-  stateRef.current = { visibleIssues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp, showPalette, showDispatcher, refreshing };
+  const stateRef = useRef({ visibleIssues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp, showPalette, showRunners, refreshing });
+  stateRef.current = { visibleIssues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp, showPalette, showRunners, refreshing };
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -355,7 +362,7 @@ export default function App() {
 
       if (e.key === "Escape") {
         if (s.showPalette) setShowPalette(false);
-        else if (s.showDispatcher) setShowDispatcher(false);
+        else if (s.showRunners) setShowRunners(false);
         else if (s.showMcp) setShowMcp(false);
         else if (s.showCreateProject) setShowCreateProject(false);
         else if (s.showCreate) setShowCreate(false);
@@ -364,18 +371,18 @@ export default function App() {
       }
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
 
-      if (e.key === "c" && !s.showPalette && !s.showCreate && !s.showCreateProject && !s.showMcp && !s.showDispatcher) {
+      if (e.key === "c" && !s.showPalette && !s.showCreate && !s.showCreateProject && !s.showMcp && !s.showRunners) {
         e.preventDefault();
         setShowCreate(true);
         return;
       }
       // Refresh works with the detail open too (it re-fetches the open issue).
-      if (e.key === "r" && !s.showPalette && !s.showCreate && !s.showCreateProject && !s.showMcp && !s.showDispatcher) {
+      if (e.key === "r" && !s.showPalette && !s.showCreate && !s.showCreateProject && !s.showMcp && !s.showRunners) {
         e.preventDefault();
         if (!s.refreshing) refreshRef.current();
         return;
       }
-      if (s.showPalette || s.showCreate || s.showCreateProject || s.showMcp || s.showDispatcher || s.openIssue) return;
+      if (s.showPalette || s.showCreate || s.showCreateProject || s.showMcp || s.showRunners || s.openIssue) return;
 
       if (e.key === "j") {
         e.preventDefault();
@@ -395,6 +402,8 @@ export default function App() {
   const heading =
     (projectFilter ? projectFilter : "All issues") +
     (statusFilter ? ` · ${STATUS_LABELS[statusFilter]}` : "");
+
+  const anyRunnerOnline = runners.some((r) => r.online);
 
   const selectedProject = projectFilter
     ? projects.find((p) => p.key === projectFilter) ?? null
@@ -432,22 +441,12 @@ export default function App() {
             <RefreshIcon spinning={refreshing} />
           </button>
           <button
-            className="btn btn-small dispatcher-btn"
-            onClick={() => setShowDispatcher(true)}
-            title={
-              dispatcherStatus.running
-                ? dispatcherStatus.paused
-                  ? "Dispatcher paused"
-                  : "Dispatcher running"
-                : "dispatcher not running"
-            }
+            className="btn btn-small runner-btn"
+            onClick={() => setShowRunners(true)}
+            title={anyRunnerOnline ? "Runners online" : "No runners online"}
           >
-            <span
-              className={`dispatcher-dot ${
-                dispatcherStatus.running ? (dispatcherStatus.paused ? "paused" : "on") : "off"
-              }`}
-            />
-            dispatcher
+            <span className={`runner-dot ${anyRunnerOnline ? "on" : "off"}`} />
+            runners
           </button>
           <button
             className="btn btn-small mcp-btn"
@@ -474,6 +473,7 @@ export default function App() {
           collapsed={collapsedStatuses}
           onToggleGroup={toggleGroup}
           labels={labels}
+          users={users}
           selectedIndex={selectedIndex}
           onSelect={setSelectedIndex}
           onOpen={setOpenIssue}
@@ -517,15 +517,15 @@ export default function App() {
         <McpModal projectKey={projectFilter} projects={projects} onClose={() => setShowMcp(false)} />
       )}
 
-      {showDispatcher && (
-        <DispatcherModal
-          status={dispatcherStatus}
-          onClose={() => setShowDispatcher(false)}
+      {showRunners && (
+        <RunnersModal
+          runners={runners}
+          onClose={() => setShowRunners(false)}
           onOpenIssue={(key) =>
             getIssue(key)
               .then((issue) => {
                 setOpenIssue(issue);
-                setShowDispatcher(false);
+                setShowRunners(false);
               })
               .catch((e) => setLoadError(`Failed to open ${key}: ${(e as Error).message}`))
           }
