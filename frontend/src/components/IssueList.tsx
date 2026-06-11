@@ -1,16 +1,50 @@
 import { useEffect, useRef } from "react";
-import type { Issue, Label } from "../api";
+import type { Issue, Label, Status } from "../api";
+import { STATUS_LABELS } from "../api";
+import type { IssueGroup } from "../grouping";
 import { Avatar, LabelChip, PriorityIcon, StatusIcon } from "./bits";
 
 interface Props {
-  issues: Issue[];
+  groups: IssueGroup[];
+  collapsed: ReadonlySet<Status>;
+  onToggleGroup: (status: Status) => void;
   labels: Label[];
+  /** Index into the visible (non-collapsed) issues, in display order. */
   selectedIndex: number;
   onSelect: (index: number) => void;
   onOpen: (issue: Issue) => void;
 }
 
-export function IssueList({ issues, labels, selectedIndex, onSelect, onOpen }: Props) {
+function Chevron({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg
+      className={`group-chevron ${collapsed ? "collapsed" : ""}`}
+      width="12"
+      height="12"
+      viewBox="0 0 12 12"
+      aria-hidden="true"
+    >
+      <path
+        d="M3.5 1.5 L8 6 L3.5 10.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function IssueList({
+  groups,
+  collapsed,
+  onToggleGroup,
+  labels,
+  selectedIndex,
+  onSelect,
+  onOpen,
+}: Props) {
   const listRef = useRef<HTMLDivElement>(null);
 
   // Keep the keyboard-selected row in view.
@@ -19,46 +53,74 @@ export function IssueList({ issues, labels, selectedIndex, onSelect, onOpen }: P
     el?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
 
-  if (issues.length === 0) {
+  if (groups.length === 0) {
     return <div className="empty-state">No issues found. Press <kbd>c</kbd> to create one.</div>;
   }
 
+  // Running index over visible rows only — must match App's visibleIssues order.
+  let visibleIndex = 0;
+
   return (
     <div className="issue-list" ref={listRef}>
-      {issues.map((issue, i) => (
-        <div
-          key={issue.key}
-          data-index={i}
-          className={`issue-row ${i === selectedIndex ? "selected" : ""}`}
-          onMouseEnter={() => onSelect(i)}
-          onClick={() => onOpen(issue)}
-        >
-          <PriorityIcon priority={issue.priority} />
-          <span className="issue-key">{issue.key}</span>
-          <StatusIcon status={issue.status} />
-          <span className="issue-title">{issue.title}</span>
-          {issue.depends_on.some((d) => d.status !== "done" && d.status !== "canceled") && (
-            <span className="blocked-chip" title={`Blocked by ${issue.depends_on.map((d) => d.key).join(", ")}`}>
-              ⊘ blocked
-            </span>
-          )}
-          {issue.subtasks.length > 0 && (
-            <span className="sub-count-chip" title={`${issue.subtasks.length} subtasks`}>
-              {issue.subtasks.length} sub
-            </span>
-          )}
-          <span className="issue-labels">
-            {issue.labels.map((name) => (
-              <LabelChip key={name} name={name} labels={labels} />
-            ))}
-          </span>
-          {issue.assignee ? (
-            <Avatar name={issue.assignee} />
-          ) : (
-            <span className="avatar avatar-empty" title="Unassigned" />
-          )}
-        </div>
-      ))}
+      {groups.map((group) => {
+        const isCollapsed = collapsed.has(group.status);
+        return (
+          <div key={group.status} className="issue-group">
+            <div
+              className="issue-group-header"
+              onClick={() => onToggleGroup(group.status)}
+              role="button"
+              aria-expanded={!isCollapsed}
+            >
+              <Chevron collapsed={isCollapsed} />
+              <StatusIcon status={group.status} />
+              <span className="issue-group-label">{STATUS_LABELS[group.status]}</span>
+              <span className="issue-group-count muted">{group.issues.length}</span>
+            </div>
+            {!isCollapsed &&
+              group.issues.map((issue) => {
+                const i = visibleIndex++;
+                return (
+                  <div
+                    key={issue.key}
+                    data-index={i}
+                    className={`issue-row ${i === selectedIndex ? "selected" : ""}`}
+                    onMouseEnter={() => onSelect(i)}
+                    onClick={() => onOpen(issue)}
+                  >
+                    <PriorityIcon priority={issue.priority} />
+                    <span className="issue-key">{issue.key}</span>
+                    <StatusIcon status={issue.status} />
+                    <span className="issue-title">{issue.title}</span>
+                    {issue.depends_on.some((d) => d.status !== "done" && d.status !== "canceled") && (
+                      <span
+                        className="blocked-chip"
+                        title={`Blocked by ${issue.depends_on.map((d) => d.key).join(", ")}`}
+                      >
+                        ⊘ blocked
+                      </span>
+                    )}
+                    {issue.subtasks.length > 0 && (
+                      <span className="sub-count-chip" title={`${issue.subtasks.length} subtasks`}>
+                        {issue.subtasks.length} sub
+                      </span>
+                    )}
+                    <span className="issue-labels">
+                      {issue.labels.map((name) => (
+                        <LabelChip key={name} name={name} labels={labels} />
+                      ))}
+                    </span>
+                    {issue.assignee ? (
+                      <Avatar name={issue.assignee} />
+                    ) : (
+                      <span className="avatar avatar-empty" title="Unassigned" />
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        );
+      })}
     </div>
   );
 }

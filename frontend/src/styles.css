@@ -282,6 +282,40 @@ kbd {
   overflow-y: auto;
 }
 
+.issue-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid #1b1d21;
+  cursor: pointer;
+  user-select: none;
+}
+
+.issue-group-header:hover {
+  background: var(--hover);
+}
+
+.issue-group-label {
+  font-weight: 600;
+}
+
+.issue-group-count {
+  font-size: 12px;
+}
+
+.group-chevron {
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform 0.12s ease;
+  transform: rotate(90deg);
+}
+
+.group-chevron.collapsed {
+  transform: rotate(0deg);
+}
+
 .issue-row {
   display: flex;
   align-items: center;

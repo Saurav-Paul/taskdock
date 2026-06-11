@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Issue, Label, Project, Status, User } from "./api";
 import { getIssue, getIssues, getLabels, getProjects, getUsers, STATUS_LABELS } from "./api";
+import { flattenVisible, groupIssues } from "./grouping";
 import { CreateIssueModal } from "./components/CreateIssueModal";
 import { CreateProjectModal } from "./components/CreateProjectModal";
 import { IssueDetail } from "./components/IssueDetail";
@@ -35,7 +36,42 @@ export default function App() {
     else localStorage.removeItem("taskdock.filter-status");
   }, [statusFilter]);
 
+  // Collapsed status groups survive reloads (same pattern as the filters above).
+  const [collapsedStatuses, setCollapsedStatuses] = useState<Set<Status>>(() => {
+    try {
+      const raw = localStorage.getItem("taskdock.collapsed-statuses");
+      return new Set(raw ? (JSON.parse(raw) as Status[]) : []);
+    } catch {
+      return new Set();
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("taskdock.collapsed-statuses", JSON.stringify([...collapsedStatuses]));
+  }, [collapsedStatuses]);
+
+  const toggleGroup = useCallback((status: Status) => {
+    setCollapsedStatuses((prev) => {
+      const next = new Set(prev);
+      if (next.has(status)) next.delete(status);
+      else next.add(status);
+      return next;
+    });
+  }, []);
+
+  const groups = useMemo(() => groupIssues(issues), [issues]);
+  // What j/k actually walks: display order, collapsed groups skipped.
+  const visibleIssues = useMemo(
+    () => flattenVisible(groups, collapsedStatuses),
+    [groups, collapsedStatuses]
+  );
+
   const [selectedIndex, setSelectedIndex] = useState(0);
+
+  // Reloads and collapses can shrink the visible list — keep the index in range.
+  useEffect(() => {
+    setSelectedIndex((i) => Math.min(i, Math.max(visibleIssues.length - 1, 0)));
+  }, [visibleIssues.length]);
   const [openIssue, setOpenIssue] = useState<Issue | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
@@ -67,7 +103,6 @@ export default function App() {
     })
       .then((list) => {
         setIssues(list);
-        setSelectedIndex((i) => Math.min(i, Math.max(list.length - 1, 0)));
         setLoadError(null);
       })
       .catch((e) => setLoadError(`Failed to load issues: ${(e as Error).message}`));
@@ -78,8 +113,8 @@ export default function App() {
   }, [loadIssues]);
 
   // Keyboard shortcuts — read latest state via ref to keep a single stable listener.
-  const stateRef = useRef({ issues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp });
-  stateRef.current = { issues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp };
+  const stateRef = useRef({ visibleIssues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp });
+  stateRef.current = { visibleIssues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp };
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -109,12 +144,12 @@ export default function App() {
 
       if (e.key === "j") {
         e.preventDefault();
-        setSelectedIndex((i) => Math.min(i + 1, Math.max(s.issues.length - 1, 0)));
+        setSelectedIndex((i) => Math.min(i + 1, Math.max(s.visibleIssues.length - 1, 0)));
       } else if (e.key === "k") {
         e.preventDefault();
         setSelectedIndex((i) => Math.max(i - 1, 0));
       } else if (e.key === "Enter") {
-        const issue = s.issues[s.selectedIndex];
+        const issue = s.visibleIssues[s.selectedIndex];
         if (issue) setOpenIssue(issue);
       }
     }
@@ -174,7 +209,9 @@ export default function App() {
           />
         )}
         <IssueList
-          issues={issues}
+          groups={groups}
+          collapsed={collapsedStatuses}
+          onToggleGroup={toggleGroup}
           labels={labels}
           selectedIndex={selectedIndex}
           onSelect={setSelectedIndex}
