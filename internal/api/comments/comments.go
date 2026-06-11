@@ -12,6 +12,7 @@ import (
 
 	"github.com/Saurav-Paul/taskdock/internal/api/issues"
 	"github.com/Saurav-Paul/taskdock/internal/api/users"
+	"github.com/Saurav-Paul/taskdock/internal/webhooks"
 )
 
 // Comment is the GORM model for the "comments" table.
@@ -103,6 +104,10 @@ func (s *Service) Create(issueKey string, req CommentCreate) (*CommentResponse, 
 	}
 
 	resp := toResponse(&comment)
+	webhooks.Notify(issue.Project.WebhookURL, "comment.created", map[string]any{
+		"issue":   issueKey,
+		"comment": resp,
+	})
 	return &resp, nil
 }
 

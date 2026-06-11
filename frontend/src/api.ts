@@ -28,6 +28,8 @@ export interface Project {
   name: string;
   key: string;
   description: string;
+  /** Webhook endpoint for issue/comment events; "" = disabled. */
+  webhook_url: string;
   created_at: string;
 }
 
@@ -41,6 +43,8 @@ export interface NewProject {
 export interface ProjectPatch {
   name?: string;
   description?: string;
+  /** Must start with http(s)://; "" disables the webhook. */
+  webhook_url?: string;
 }
 
 export interface User {
@@ -83,6 +87,8 @@ export interface Issue {
   depends_on: IssueRef[];
   blocks: IssueRef[];
   links: IssueLink[];
+  /** "YYYY-MM-DD"; absent when unset. */
+  due_date?: string;
   /** Server-computed branch name (includes the configured prefix). */
   branch: string;
   created_at: string;
@@ -118,6 +124,8 @@ export interface IssuePatch {
   parent?: string;
   /** Replaces the full set of dependency keys; [] clears. */
   depends_on?: string[];
+  /** "YYYY-MM-DD"; "" clears. */
+  due_date?: string;
 }
 
 export interface NewIssue extends IssuePatch {

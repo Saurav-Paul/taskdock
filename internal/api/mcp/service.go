@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Saurav-Paul/taskdock/internal/api/comments"
 	"github.com/Saurav-Paul/taskdock/internal/api/issues"
@@ -178,6 +179,13 @@ func (s *Service) getIssue(args map[string]any) ([]map[string]any, bool) {
 	if issue.Parent != nil {
 		fmt.Fprintf(&b, "- **Parent:** [%s] %s (%s)\n", issue.Parent.Key, issue.Parent.Title, issue.Parent.Status)
 	}
+	if issue.DueDate != nil {
+		marker := ""
+		if *issue.DueDate <= time.Now().UTC().Format("2006-01-02") {
+			marker = " ⚠ OVERDUE"
+		}
+		fmt.Fprintf(&b, "- **Due:** %s%s\n", *issue.DueDate, marker)
+	}
 	fmt.Fprintf(&b, "- **Branch:** %s\n", issue.Branch)
 	fmt.Fprintf(&b, "- **Created:** %s | **Updated:** %s (UTC)\n", issue.CreatedAt.UTC().Format("2006-01-02 15:04"), issue.UpdatedAt.UTC().Format("2006-01-02 15:04"))
 	if issue.StartedAt != nil {
@@ -331,6 +339,10 @@ func (s *Service) saveIssue(args map[string]any) (string, bool) {
 			depKeys := argStringSlice(v)
 			update.DependsOn = &depKeys
 		}
+		if v, ok := args["due_date"]; ok {
+			str := fmt.Sprint(v)
+			update.DueDate = &str
+		}
 
 		issue, err := s.issues.Update(key, update)
 		if err != nil {
@@ -349,6 +361,7 @@ func (s *Service) saveIssue(args map[string]any) (string, bool) {
 		Assignee:    argString(args, "assignee"),
 		Parent:      argString(args, "parent"),
 		Number:      argInt(args, "number", 0),
+		DueDate:     argString(args, "due_date"),
 	}
 	if v, ok := args["labels"]; ok {
 		create.Labels = argStringSlice(v)

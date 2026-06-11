@@ -37,9 +37,24 @@ Issue trackers are built for teams; taskdock is built for *you and your agents*:
 
 ### Built for keyboard
 
+`cmd+k` **command palette** (fuzzy: type "mip" to mark an issue In Progress) ·
 `c` new issue · `j`/`k` navigate · `Enter` open · `f` fullscreen · `Esc` close —
 plus one-click copy for the issue key and a **generated git branch name**
-(`aur-6-conflict-resolution-strategy`).
+(`feature/aur-6-conflict-resolution-strategy`).
+
+### Due dates that act like deadlines
+
+Issues take a `due_date`; overdue work is flagged in the list and **jumps the
+priority queue in `get_next_task`** — an overdue low-priority issue outranks a
+fresh urgent one.
+
+### Webhooks → agent automation
+
+Each project can have a `webhook_url`, POSTed `issue.created/updated/deleted`
+and `comment.created` events with full payloads. The intended loop: assign an
+issue to `claude` → webhook fires → your script launches a Claude Code session
+that calls `get_next_task` and starts working. taskdock becomes the
+dispatcher.
 
 ![Comments and relations](docs/screenshots/issue-comments.png)
 

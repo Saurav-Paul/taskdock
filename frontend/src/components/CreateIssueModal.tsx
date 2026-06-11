@@ -18,6 +18,7 @@ export function CreateIssueModal({ projects, users, labels, defaultProject, onCl
   const [status, setStatus] = useState<Status>("todo");
   const [priority, setPriority] = useState<Priority>("none");
   const [assignee, setAssignee] = useState("");
+  const [dueDate, setDueDate] = useState("");
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +39,7 @@ export function CreateIssueModal({ projects, users, labels, defaultProject, onCl
     };
     if (descriptionRef.current.trim()) body.description = descriptionRef.current;
     if (assignee) body.assignee = assignee;
+    if (dueDate) body.due_date = dueDate;
     try {
       await createIssue(body);
       onCreated();
@@ -113,6 +115,13 @@ export function CreateIssueModal({ projects, users, labels, defaultProject, onCl
               </option>
             ))}
           </select>
+          <input
+            type="date"
+            className="due-date-input"
+            title="Due date (optional)"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+          />
         </div>
 
         {labels.length > 0 && (

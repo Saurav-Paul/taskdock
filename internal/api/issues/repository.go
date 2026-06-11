@@ -214,7 +214,10 @@ func (r *Repository) NextTask(assigneeName, projectKey string) (*Issue, error) {
 }
 
 // priorityOrder sorts urgent → high → medium → low → none in SQL.
-const priorityOrder = `CASE issues.priority
+// An issue due today or overdue outranks everything regardless of priority.
+const priorityOrder = `(CASE WHEN issues.due_date IS NOT NULL
+		AND issues.due_date <= date('now') THEN 1 ELSE 0 END) DESC,
+	CASE issues.priority
 	WHEN 'urgent' THEN 4
 	WHEN 'high' THEN 3
 	WHEN 'medium' THEN 2

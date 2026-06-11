@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import type { Issue, Label, Status } from "../api";
 import { STATUS_LABELS } from "../api";
 import type { IssueGroup } from "../grouping";
-import { Avatar, LabelChip, PriorityIcon, StatusIcon } from "./bits";
+import { Avatar, daysUntilDue, formatDueDate, isClosed, LabelChip, PriorityIcon, StatusIcon } from "./bits";
 
 interface Props {
   groups: IssueGroup[];
@@ -13,6 +13,18 @@ interface Props {
   selectedIndex: number;
   onSelect: (index: number) => void;
   onOpen: (issue: Issue) => void;
+}
+
+function DueChip({ dueDate }: { dueDate: string }) {
+  const days = daysUntilDue(dueDate);
+  const cls = days < 0 ? "overdue" : days <= 3 ? "soon" : "";
+  const text =
+    days < 0 ? "overdue" : days === 0 ? "today" : days <= 3 ? `${days}d` : formatDueDate(dueDate);
+  return (
+    <span className={`due-chip ${cls}`} title={`Due ${dueDate}`}>
+      {text}
+    </span>
+  );
 }
 
 function Chevron({ collapsed }: { collapsed: boolean }) {
@@ -110,6 +122,7 @@ export function IssueList({
                         <LabelChip key={name} name={name} labels={labels} />
                       ))}
                     </span>
+                    {issue.due_date && !isClosed(issue.status) && <DueChip dueDate={issue.due_date} />}
                     {issue.assignee ? (
                       <Avatar name={issue.assignee} />
                     ) : (

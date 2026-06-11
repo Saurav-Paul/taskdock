@@ -15,7 +15,7 @@ import {
   STATUS_LABELS,
   updateIssue,
 } from "../api";
-import { Avatar, relativeTime, StatusIcon, STATUS_COLORS } from "./bits";
+import { Avatar, daysUntilDue, isClosed, relativeTime, StatusIcon, STATUS_COLORS } from "./bits";
 import { Markdown } from "./Markdown";
 import { MarkdownEditor } from "./MarkdownEditor";
 
@@ -81,6 +81,12 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
     setCopied(null);
     getComments(initial.key).then(setComments).catch(() => setComments([]));
   }, [initial.key]);
+
+  // Command-palette actions update the issue in App (same key, new object) —
+  // keep the local copy in sync without resetting the edit state above.
+  useEffect(() => {
+    setIssue(initial);
+  }, [initial]);
 
   useEffect(() => {
     localStorage.setItem(FULLSCREEN_STORAGE_KEY, fullscreen ? "1" : "0");
@@ -240,6 +246,7 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
   }
 
   const subtasksDone = issue.subtasks.filter((s) => s.status === "done").length;
+  const overdue = !!issue.due_date && daysUntilDue(issue.due_date) <= 0 && !isClosed(issue.status);
   // The server-provided branch is authoritative (it includes the configured
   // prefix); fall back to the local helper for older servers.
   const branch = issue.branch || branchName(issue.key, issue.title);
@@ -533,6 +540,25 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
                     </button>
                   );
                 })}
+              </div>
+            </PropRow>
+            <PropRow label="Due date">
+              <div className={`due-date-control ${overdue ? "overdue" : ""}`}>
+                <input
+                  type="date"
+                  className="due-date-input"
+                  value={issue.due_date ?? ""}
+                  onChange={(e) => void patch({ due_date: e.target.value })}
+                />
+                {issue.due_date && (
+                  <button
+                    className="relation-remove"
+                    onClick={() => void patch({ due_date: "" })}
+                    title="Clear due date"
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             </PropRow>
             <PropRow label="Created">

@@ -235,6 +235,49 @@ kbd {
   border-color: var(--accent);
 }
 
+.project-header.editing {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.project-header-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.webhook-label {
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.project-webhook-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  outline: none;
+}
+
+.project-webhook-input:focus {
+  border-color: var(--accent);
+}
+
+.webhook-indicator {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.webhook-indicator svg {
+  display: block;
+}
+
 /* ── Buttons ────────────────────────────────────────── */
 
 .btn {
@@ -417,6 +460,28 @@ kbd {
 
 .sub-count-chip {
   color: var(--muted);
+}
+
+.due-chip {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.due-chip.overdue {
+  color: #eb5757;
+  border-color: rgba(235, 87, 87, 0.35);
+  background: rgba(235, 87, 87, 0.08);
+}
+
+.due-chip.soon {
+  color: #f2c94c;
+  border-color: rgba(242, 201, 76, 0.35);
+  background: rgba(242, 201, 76, 0.08);
 }
 
 .empty-state {
@@ -606,6 +671,39 @@ select {
 
 select:focus {
   border-color: var(--accent);
+}
+
+.due-date-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.due-date-input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  color-scheme: dark; /* dark native date picker */
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  outline: none;
+}
+
+.due-date-input:focus {
+  border-color: var(--accent);
+}
+
+.due-date-control.overdue .due-date-input {
+  color: #fc7840;
+  border-color: rgba(252, 120, 64, 0.45);
+}
+
+.modal-props .due-date-input {
+  flex: 0 1 auto;
+  width: auto;
 }
 
 .label-toggle-list {
@@ -1181,4 +1279,82 @@ select:focus {
 .mcp-hint {
   margin: 0;
   font-size: 12px;
+}
+
+/* ── Command palette ───────────────────────────────── */
+
+.palette-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 16vh;
+  z-index: 30; /* above detail + modals — Esc closes it first, too */
+}
+
+.palette {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: min(560px, calc(100vw - 48px));
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.palette-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 12px 14px;
+  font-size: 14px;
+  color: var(--text);
+  outline: none;
+}
+
+.palette-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.palette-item.selected {
+  background: var(--hover);
+}
+
+.palette-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.palette-hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.palette-empty {
+  padding: 16px;
+  text-align: center;
+}
+
+.palette-footer {
+  border-top: 1px solid var(--border);
+  padding: 6px 12px;
+  font-size: 11px;
+  font-family: var(--mono);
 }

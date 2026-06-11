@@ -3,6 +3,8 @@
 package projects
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -18,6 +20,7 @@ type Project struct {
 	Key         string    `gorm:"uniqueIndex;not null" json:"key"`
 	Description string    `gorm:"not null;default:''" json:"description"`
 	NextNumber  int       `gorm:"not null;default:1" json:"next_number"` // issue counter
+	WebhookURL  string    `gorm:"not null;default:''" json:"webhook_url"` // POSTed issue/comment events; empty = off
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -36,6 +39,7 @@ type ProjectCreate struct {
 type ProjectUpdate struct {
 	Name        *string `json:"name,omitempty"`
 	Description *string `json:"description,omitempty"`
+	WebhookURL  *string `json:"webhook_url,omitempty"` // "" disables webhooks
 }
 
 // Service handles business logic for projects.
@@ -91,6 +95,14 @@ func (s *Service) Update(key string, req ProjectUpdate) (*Project, error) {
 	}
 	if req.Description != nil {
 		updates["description"] = *req.Description
+	}
+	if req.WebhookURL != nil {
+		if *req.WebhookURL != "" &&
+			!strings.HasPrefix(*req.WebhookURL, "http://") &&
+			!strings.HasPrefix(*req.WebhookURL, "https://") {
+			return nil, fmt.Errorf("'webhook_url' must start with http:// or https:// (or be empty to disable)")
+		}
+		updates["webhook_url"] = *req.WebhookURL
 	}
 	if len(updates) > 0 {
 		if err := s.db.Model(project).Updates(updates).Error; err != nil {
@@ -168,7 +180,11 @@ func (h *Handler) update(c echo.Context) error {
 
 	project, err := h.service.Update(c.Param("key"), req)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "Project not found")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "Project not found")
+		}
+		// Validation errors (e.g. bad webhook_url scheme) are the client's fault.
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	return c.JSON(http.StatusOK, project)
 }

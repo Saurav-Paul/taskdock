@@ -107,6 +107,27 @@ export function LabelChip({ name, labels }: { name: string; labels: Label[] }) {
   );
 }
 
+const DAY_MS = 86_400_000;
+
+/** Whole days from today (local) to a "YYYY-MM-DD" due date; negative = overdue. */
+export function daysUntilDue(dueDate: string): number {
+  const [y, m, d] = dueDate.split("-").map(Number);
+  const now = new Date();
+  const due = new Date(y, m - 1, d).getTime();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return Math.round((due - today) / DAY_MS);
+}
+
+/** Short label for a "YYYY-MM-DD" due date, e.g. "Jun 24" (with year if not this year). */
+export function formatDueDate(dueDate: string): string {
+  const [y, m, d] = dueDate.split("-").map(Number);
+  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  if (y !== new Date().getFullYear()) opts.year = "numeric";
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", opts);
+}
+
+export const isClosed = (status: Status) => status === "done" || status === "canceled";
+
 export function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);

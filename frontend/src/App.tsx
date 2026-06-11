@@ -1,7 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Issue, Label, Project, Status, User } from "./api";
-import { getIssue, getIssues, getLabels, getProjects, getUsers, STATUS_LABELS } from "./api";
+import type { Issue, IssuePatch, Label, Project, Status, User } from "./api";
+import {
+  getIssue,
+  getIssues,
+  getLabels,
+  getProjects,
+  getUsers,
+  PRIORITIES,
+  PRIORITY_LABELS,
+  STATUSES,
+  STATUS_LABELS,
+  updateIssue,
+} from "./api";
 import { flattenVisible, groupIssues } from "./grouping";
+import { CommandPalette, type PaletteCommand } from "./components/CommandPalette";
 import { CreateIssueModal } from "./components/CreateIssueModal";
 import { CreateProjectModal } from "./components/CreateProjectModal";
 import { IssueDetail } from "./components/IssueDetail";
@@ -76,6 +88,7 @@ export default function App() {
   const [showCreate, setShowCreate] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
+  const [showPalette, setShowPalette] = useState(false);
 
   useEffect(() => {
     Promise.all([getProjects(), getUsers(), getLabels()])
@@ -112,9 +125,96 @@ export default function App() {
     loadIssues();
   }, [loadIssues]);
 
+  // Issue the palette acts on: the open detail wins, else the list selection.
+  const contextIssue = openIssue ?? visibleIssues[selectedIndex] ?? null;
+
+  // Patch + refresh, shared by the palette's status/priority/assign commands.
+  const patchIssue = useCallback(
+    (key: string, patch: IssuePatch) => {
+      updateIssue(key, patch)
+        .then((updated) => {
+          loadIssues();
+          setOpenIssue((cur) => (cur && cur.key === key ? updated : cur));
+        })
+        .catch((e) => setLoadError(`Failed to update ${key}: ${(e as Error).message}`));
+    },
+    [loadIssues]
+  );
+
+  const copyText = useCallback((text: string) => {
+    navigator.clipboard
+      .writeText(text)
+      .catch((e) => setLoadError(`Failed to copy: ${(e as Error).message}`));
+  }, []);
+
+  const paletteCommands = useMemo<PaletteCommand[]>(() => {
+    const cmds: PaletteCommand[] = [];
+    const issue = contextIssue;
+    if (issue) {
+      // Issue-scoped commands come first; "mark as …" aliases make
+      // Linear-style queries like "mip" hit "Set status: In Progress".
+      for (const st of STATUSES)
+        cmds.push({
+          id: `status:${st}`,
+          label: `Set status: ${STATUS_LABELS[st]}`,
+          keywords: `mark as ${STATUS_LABELS[st]} move`,
+          hint: issue.key,
+          run: () => patchIssue(issue.key, { status: st }),
+        });
+      for (const pr of PRIORITIES)
+        cmds.push({
+          id: `priority:${pr}`,
+          label: `Set priority: ${PRIORITY_LABELS[pr]}`,
+          keywords: `make priority ${PRIORITY_LABELS[pr]}`,
+          hint: issue.key,
+          run: () => patchIssue(issue.key, { priority: pr }),
+        });
+      for (const u of users)
+        cmds.push({
+          id: `assign:${u.name}`,
+          label: `Assign to: ${u.display_name}`,
+          keywords: `assignee ${u.name}`,
+          hint: issue.key,
+          run: () => patchIssue(issue.key, { assignee: u.name }),
+        });
+      cmds.push({
+        id: "copy-key",
+        label: "Copy issue key",
+        hint: issue.key,
+        run: () => copyText(issue.key),
+      });
+      cmds.push({
+        id: "copy-branch",
+        label: "Copy branch name",
+        keywords: "git checkout",
+        hint: issue.key,
+        run: () => copyText(issue.branch),
+      });
+    }
+    cmds.push({ id: "new-issue", label: "Create new issue…", keywords: "add", run: () => setShowCreate(true) });
+    for (const p of projects)
+      cmds.push({
+        id: `project:${p.key}`,
+        label: `Go to project: ${p.name}`,
+        keywords: `navigate ${p.key}`,
+        hint: p.key,
+        run: () => setProjectFilter(p.key),
+      });
+    cmds.push({
+      id: "project:all",
+      label: "Go to All issues",
+      keywords: "navigate everything",
+      run: () => setProjectFilter(null),
+    });
+    // Issues join the same list (core requirement: one fuzzy list).
+    for (const i of issues)
+      cmds.push({ id: `open:${i.key}`, label: i.title, keywords: i.key, hint: i.key, run: () => setOpenIssue(i) });
+    return cmds;
+  }, [contextIssue, users, projects, issues, patchIssue, copyText]);
+
   // Keyboard shortcuts — read latest state via ref to keep a single stable listener.
-  const stateRef = useRef({ visibleIssues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp });
-  stateRef.current = { visibleIssues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp };
+  const stateRef = useRef({ visibleIssues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp, showPalette });
+  stateRef.current = { visibleIssues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp, showPalette };
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -126,8 +226,22 @@ export default function App() {
         target.tagName === "SELECT" ||
         target.isContentEditable;
 
+      // cmd+k / ctrl+k toggles the palette. Never hijack the browser (or
+      // Tiptap) default while typing — except inside the palette itself.
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+        if (s.showPalette) {
+          e.preventDefault();
+          setShowPalette(false);
+        } else if (!typing) {
+          e.preventDefault();
+          setShowPalette(true);
+        }
+        return;
+      }
+
       if (e.key === "Escape") {
-        if (s.showMcp) setShowMcp(false);
+        if (s.showPalette) setShowPalette(false);
+        else if (s.showMcp) setShowMcp(false);
         else if (s.showCreateProject) setShowCreateProject(false);
         else if (s.showCreate) setShowCreate(false);
         else if (s.openIssue) setOpenIssue(null);
@@ -135,12 +249,12 @@ export default function App() {
       }
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
 
-      if (e.key === "c" && !s.showCreate && !s.showCreateProject && !s.showMcp) {
+      if (e.key === "c" && !s.showPalette && !s.showCreate && !s.showCreateProject && !s.showMcp) {
         e.preventDefault();
         setShowCreate(true);
         return;
       }
-      if (s.showCreate || s.showCreateProject || s.showMcp || s.openIssue) return;
+      if (s.showPalette || s.showCreate || s.showCreateProject || s.showMcp || s.openIssue) return;
 
       if (e.key === "j") {
         e.preventDefault();
@@ -254,6 +368,10 @@ export default function App() {
 
       {showMcp && (
         <McpModal projectKey={projectFilter} projects={projects} onClose={() => setShowMcp(false)} />
+      )}
+
+      {showPalette && (
+        <CommandPalette commands={paletteCommands} onClose={() => setShowPalette(false)} />
       )}
 
       {showCreateProject && (

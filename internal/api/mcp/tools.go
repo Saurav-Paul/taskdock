@@ -123,6 +123,10 @@ var toolDefinitions = []toolDefinition{
 					"type":        "integer",
 					"description": "Explicit issue number when importing from another tracker (e.g. 951 → PRO-951). Omit for the next auto number. Creation only.",
 				},
+				"due_date": map[string]any{
+					"type":        "string",
+					"description": "Deadline as YYYY-MM-DD. Pass an empty string to clear. Issues due today or overdue jump the priority queue in get_next_task.",
+				},
 			},
 		},
 	},

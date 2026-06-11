@@ -21,6 +21,7 @@ type IssueCreate struct {
 	Parent      string   `json:"parent"`     // parent issue key — makes this a subtask
 	DependsOn   []string `json:"depends_on"` // issue keys this issue is blocked by
 	Number      int      `json:"number"`     // explicit number for imports (0 = auto)
+	DueDate     string   `json:"due_date"`   // YYYY-MM-DD; empty = none
 }
 
 // IssueUpdate is the JSON body for PATCH /api/issues/:key.
@@ -35,6 +36,7 @@ type IssueUpdate struct {
 	Labels      *[]string `json:"labels,omitempty"`
 	Parent      *string   `json:"parent,omitempty"`     // "" detaches from parent
 	DependsOn   *[]string `json:"depends_on,omitempty"` // replaces the set
+	DueDate     *string   `json:"due_date,omitempty"`   // YYYY-MM-DD; "" clears
 }
 
 // ListFilters are the query parameters for GET /api/issues.
@@ -71,6 +73,7 @@ type IssueResponse struct {
 	DependsOn   []IssueRef `json:"depends_on"`
 	Blocks      []IssueRef `json:"blocks"`
 	Links       []Link     `json:"links"`
+	DueDate     *string    `json:"due_date,omitempty"` // YYYY-MM-DD
 	StartedAt   *time.Time `json:"started_at,omitempty"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
@@ -94,6 +97,7 @@ func ToResponse(i *Issue) IssueResponse {
 		DependsOn:   toRefs(i.DependsOn),
 		Blocks:      toRefs(i.Blocks),
 		Links:       append([]Link{}, i.Links...),
+		DueDate:     i.DueDate,
 		StartedAt:   i.StartedAt,
 		CompletedAt: i.CompletedAt,
 		CreatedAt:   i.CreatedAt,

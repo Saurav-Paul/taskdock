@@ -9,6 +9,7 @@ import (
 	"github.com/Saurav-Paul/taskdock/internal/api/labels"
 	"github.com/Saurav-Paul/taskdock/internal/api/projects"
 	"github.com/Saurav-Paul/taskdock/internal/api/users"
+	"github.com/Saurav-Paul/taskdock/internal/webhooks"
 )
 
 // Service handles business logic for issues. It resolves project keys,
@@ -100,6 +101,13 @@ func (s *Service) Create(req IssueCreate) (*IssueResponse, error) {
 		issue.CompletedAt = &now
 	}
 
+	if req.DueDate != "" {
+		if !isValidDate(req.DueDate) {
+			return nil, fmt.Errorf("invalid due_date: %s (expected YYYY-MM-DD)", req.DueDate)
+		}
+		issue.DueDate = &req.DueDate
+	}
+
 	if req.Assignee != "" {
 		user, err := s.users.GetByName(req.Assignee)
 		if err != nil {
@@ -141,7 +149,18 @@ func (s *Service) Create(req IssueCreate) (*IssueResponse, error) {
 	}
 
 	// Re-fetch with relations so the response includes project/assignee/labels.
-	return s.Get(fmt.Sprintf("%s-%d", project.Key, issue.Number))
+	resp, err := s.Get(fmt.Sprintf("%s-%d", project.Key, issue.Number))
+	if err != nil {
+		return nil, err
+	}
+	webhooks.Notify(project.WebhookURL, "issue.created", resp)
+	return resp, nil
+}
+
+// isValidDate reports whether s is a valid YYYY-MM-DD date.
+func isValidDate(s string) bool {
+	_, err := time.Parse("2006-01-02", s)
+	return err == nil
 }
 
 // Update applies non-nil fields to the issue and returns the updated response.
@@ -199,6 +218,16 @@ func (s *Service) Update(key string, req IssueUpdate) (*IssueResponse, error) {
 			updates["assignee_id"] = user.ID
 		}
 	}
+	if req.DueDate != nil {
+		if *req.DueDate == "" {
+			updates["due_date"] = nil // clear the deadline
+		} else {
+			if !isValidDate(*req.DueDate) {
+				return nil, fmt.Errorf("invalid due_date: %s (expected YYYY-MM-DD)", *req.DueDate)
+			}
+			updates["due_date"] = *req.DueDate
+		}
+	}
 	if req.Parent != nil {
 		if *req.Parent == "" {
 			updates["parent_id"] = nil // detach from parent
@@ -247,7 +276,12 @@ func (s *Service) Update(key string, req IssueUpdate) (*IssueResponse, error) {
 		}
 	}
 
-	return s.Get(key)
+	resp, err := s.Get(key)
+	if err != nil {
+		return nil, err
+	}
+	webhooks.Notify(issue.Project.WebhookURL, "issue.updated", resp)
+	return resp, nil
 }
 
 // resolveDependencies turns issue keys into rows, rejecting self-references
@@ -281,7 +315,12 @@ func (s *Service) Delete(key string) error {
 	if err != nil {
 		return fmt.Errorf("issue not found: %s", key)
 	}
-	return s.repo.Delete(issue)
+	resp := ToResponse(issue) // snapshot before deletion for the webhook
+	if err := s.repo.Delete(issue); err != nil {
+		return err
+	}
+	webhooks.Notify(issue.Project.WebhookURL, "issue.deleted", resp)
+	return nil
 }
 
 // NextTask returns the highest-priority unstarted issue assigned to the
