@@ -16,9 +16,24 @@ export default function App() {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [projectFilter, setProjectFilter] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<Status | null>(null);
+  // Filters survive reloads (same pattern as the detail fullscreen pref).
+  const [projectFilter, setProjectFilter] = useState<string | null>(
+    () => localStorage.getItem("taskdock.filter-project")
+  );
+  const [statusFilter, setStatusFilter] = useState<Status | null>(
+    () => localStorage.getItem("taskdock.filter-status") as Status | null
+  );
   const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (projectFilter) localStorage.setItem("taskdock.filter-project", projectFilter);
+    else localStorage.removeItem("taskdock.filter-project");
+  }, [projectFilter]);
+
+  useEffect(() => {
+    if (statusFilter) localStorage.setItem("taskdock.filter-status", statusFilter);
+    else localStorage.removeItem("taskdock.filter-status");
+  }, [statusFilter]);
 
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [openIssue, setOpenIssue] = useState<Issue | null>(null);
@@ -32,6 +47,8 @@ export default function App() {
         setProjects(p);
         setUsers(u);
         setLabels(l);
+        // The remembered project may have been deleted since last visit.
+        setProjectFilter((key) => (key && !p.some((pr) => pr.key === key) ? null : key));
       })
       .catch((e) => setLoadError(`Failed to load workspace: ${(e as Error).message}`));
   }, []);
