@@ -91,7 +91,7 @@ var toolDefinitions = []toolDefinition{
 				},
 				"description": map[string]any{
 					"type":        "string",
-					"description": "Issue description in markdown",
+					"description": "Issue description in markdown. Mermaid fenced code blocks (```mermaid) render as diagrams in the UI — use them for architecture sketches, flows, and sequence diagrams.",
 				},
 				"status": map[string]any{
 					"type": "string",
@@ -146,7 +146,7 @@ var toolDefinitions = []toolDefinition{
 	},
 	{
 		Name:        "taskdock_save_comment",
-		Description: "Add a markdown comment to an issue. Use this to log progress, decisions, or results while working on a ticket. Images work the same as in descriptions: upload via curl -F 'file=@img.png;type=image/png' <server>/api/attachments, then embed the returned url as ![](/files/...).",
+		Description: "Add a markdown comment to an issue. Use this to log progress, decisions, or results while working on a ticket — a ```mermaid code block renders as a diagram, great for explaining what you built or changed. Images work the same as in descriptions: upload via curl -F 'file=@img.png;type=image/png' <server>/api/attachments, then embed the returned url as ![](/files/...).",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
