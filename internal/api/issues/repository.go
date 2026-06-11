@@ -52,7 +52,12 @@ func (r *Repository) List(f ListFilters) ([]Issue, error) {
 	}
 	if f.Query != "" {
 		like := "%" + f.Query + "%"
-		q = q.Where("issues.title LIKE ? OR issues.description LIKE ?", like, like)
+		// Match the public key too ("965", "PRO-965", "pro-9") — the
+		// projects table is already joined above.
+		q = q.Where(
+			"issues.title LIKE ? OR issues.description LIKE ? OR (projects.key || '-' || issues.number) LIKE ?",
+			like, like, strings.ToUpper(like),
+		)
 	}
 	if f.Limit > 0 {
 		q = q.Limit(f.Limit)
