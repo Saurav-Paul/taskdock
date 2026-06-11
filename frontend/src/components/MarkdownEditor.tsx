@@ -8,6 +8,7 @@ import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import { Markdown } from "tiptap-markdown";
 import { uploadAttachment } from "../api";
+import { MermaidCodeBlock } from "./MermaidCodeBlock";
 
 function getMarkdown(editor: Editor): string {
   return (editor.storage as Record<string, any>).markdown.getMarkdown();
@@ -54,7 +55,8 @@ export function MarkdownEditor({ value, placeholder, autofocus, onSave, onChange
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ codeBlock: false }),
+      MermaidCodeBlock,
       Image.configure({ inline: false }),
       Table.configure({ resizable: false }),
       TableRow,

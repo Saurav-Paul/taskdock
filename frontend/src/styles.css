@@ -953,6 +953,32 @@ select:focus {
   color: var(--muted);
 }
 
+/* ── Mermaid diagrams ───────────────────────────────── */
+
+.mermaid-diagram {
+  display: flex;
+  justify-content: center;
+  max-width: 100%;
+  overflow-x: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  margin: 0 0 14px;
+}
+
+.mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-error {
+  margin: 0 0 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* ── Subtasks ───────────────────────────────────────── */
 
 .subtasks {

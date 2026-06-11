@@ -1,5 +1,8 @@
 // Tiny markdown renderer for read-only contexts (comments).
 // Supports headings, bold, italic, inline code, code blocks, links, images, lists, tables.
+// ```mermaid fences are rendered as live diagrams via <MermaidDiagram>.
+
+import { MermaidDiagram } from "./MermaidDiagram";
 
 function escapeHtml(s: string): string {
   return s
@@ -128,6 +131,61 @@ export function markdownToHtml(md: string): string {
   return out.join("\n");
 }
 
+// Split markdown into plain segments and ```mermaid fences so diagrams can be
+// React-rendered islands while everything else keeps the string→HTML pipeline.
+type Segment = { type: "md"; text: string } | { type: "mermaid"; code: string };
+
+const MERMAID_FENCE = /^```\s*mermaid\s*$/;
+const FENCE = /^```/;
+
+function splitMermaidSegments(md: string): Segment[] {
+  const lines = md.split("\n");
+  const segments: Segment[] = [];
+  let plain: string[] = [];
+  let inCode = false;
+
+  const flushPlain = () => {
+    if (plain.length) {
+      segments.push({ type: "md", text: plain.join("\n") });
+      plain = [];
+    }
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!inCode && MERMAID_FENCE.test(line.trim())) {
+      flushPlain();
+      const code: string[] = [];
+      i++;
+      while (i < lines.length && !FENCE.test(lines[i].trim())) {
+        code.push(lines[i]);
+        i++;
+      }
+      // i now sits on the closing fence (or EOF) — consumed by the loop.
+      segments.push({ type: "mermaid", code: code.join("\n") });
+      continue;
+    }
+    if (FENCE.test(line.trim())) inCode = !inCode;
+    plain.push(line);
+  }
+  flushPlain();
+  return segments;
+}
+
 export function Markdown({ source }: { source: string }) {
-  return <div className="markdown" dangerouslySetInnerHTML={{ __html: markdownToHtml(source) }} />;
+  const segments = splitMermaidSegments(source);
+  if (!segments.some((s) => s.type === "mermaid")) {
+    return <div className="markdown" dangerouslySetInnerHTML={{ __html: markdownToHtml(source) }} />;
+  }
+  return (
+    <div className="markdown">
+      {segments.map((seg, i) =>
+        seg.type === "mermaid" ? (
+          <MermaidDiagram key={i} source={seg.code} />
+        ) : (
+          <div key={i} dangerouslySetInnerHTML={{ __html: markdownToHtml(seg.text) }} />
+        )
+      )}
+    </div>
+  );
 }
