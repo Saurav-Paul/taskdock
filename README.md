@@ -51,10 +51,37 @@ fresh urgent one.
 ### Webhooks → agent automation
 
 Each project can have a `webhook_url`, POSTed `issue.created/updated/deleted`
-and `comment.created` events with full payloads. The intended loop: assign an
-issue to `claude` → webhook fires → your script launches a Claude Code session
-that calls `get_next_task` and starts working. taskdock becomes the
-dispatcher.
+and `comment.created` events with full payloads.
+
+### The dispatcher: assign a ticket, a session starts
+
+`cmd/dispatcher` is a host-side daemon (it drives tmux, so it runs on your
+machine, not in Docker) that closes the loop:
+
+```
+assign to claude → webhook → dispatcher → tmux window running claude
+→ works the ticket → in_review → session exits → next queued ticket launches
+```
+
+```bash
+go build -o bin/dispatcher ./cmd/dispatcher
+cp dispatcher.json.example dispatcher.json   # map project keys → repo paths
+./bin/dispatcher                              # or -dry-run to watch decisions
+# then point each project's webhook_url at http://host.docker.internal:9876/hook
+```
+
+- Sessions are **interactive tmux windows** (named after the issue key, in a
+  `taskdock` tmux session): output streams live, questions are answerable,
+  takeover is always possible. Launched with `--permission-mode acceptEdits`.
+- One session per project; the queue drains serially in priority/dependency
+  order via `get_next_task`.
+- Failures are visible: a session that exits without moving its ticket gets a
+  comment + notification, and a 30-min cooldown prevents relaunch loops
+  (re-assigning retries immediately).
+- macOS notifications on launch/finish/stuck; optional `ntfy_url` for phones.
+- Pause everything with `touch ~/.taskdock-dispatcher-pause`.
+- Each mapped repo should have the project-scoped MCP server configured
+  (grab `.mcp.json` from the **MCP** button) so sessions can reach the tracker.
 
 ![Comments and relations](docs/screenshots/issue-comments.png)
 

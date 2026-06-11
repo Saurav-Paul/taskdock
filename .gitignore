@@ -1,6 +1,9 @@
 # Data (SQLite db lives here in dev)
 /data/
 
+# Local dispatcher config (machine-specific repo paths)
+/dispatcher.json
+
 # Binaries
 /bin/
 /dist/
