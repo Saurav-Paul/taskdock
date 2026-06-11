@@ -196,27 +196,56 @@ func (d *Dispatcher) Run() error {
 	return http.ListenAndServe(d.cfg.Listen, mux)
 }
 
-// monitorLoop notices dead panes: checks the outcome, surfaces silent
-// failures on the ticket, releases the lock, and drains the queue.
+// monitorLoop watches running sessions for two endings:
+//   - the ticket reached in_review/done — interactive claude sessions do
+//     NOT exit when finished (they wait at the input prompt), so ticket
+//     state is the success signal. The window stays open for inspection,
+//     renamed with a ✓.
+//   - the pane died — the failure/abort path (closed window, crash).
 func (d *Dispatcher) monitorLoop() {
 	for range time.Tick(monitorInterval) {
 		d.mu.Lock()
-		var finished []*session
-		for project, s := range d.sessions {
-			if s.paneID != "" && !PaneAlive(s.paneID) {
-				finished = append(finished, s)
-				delete(d.sessions, project)
+		snapshot := make([]*session, 0, len(d.sessions))
+		for _, s := range d.sessions {
+			if s.paneID != "" {
+				snapshot = append(snapshot, s)
 			}
 		}
 		d.mu.Unlock()
 
-		for _, s := range finished {
-			d.sessionFinished(s)
+		for _, s := range snapshot {
+			if !PaneAlive(s.paneID) {
+				d.release(s.project)
+				d.sessionFinished(s)
+				continue
+			}
+
+			issue, err := d.taskdock.GetIssue(s.key)
+			if err != nil {
+				continue
+			}
+			if issue.Status == "in_review" || issue.Status == "done" {
+				log.Printf("%s: ticket reached %s — session complete (window left open)", s.key, issue.Status)
+				MarkWindowDone(s.paneID, s.key)
+				d.release(s.project)
+				d.notifier.Send(s.key + " → " + issue.Status)
+				if !d.cfg.Paused() {
+					d.tryLaunch(s.project)
+				}
+			}
 		}
 	}
 }
 
-// sessionFinished handles a session whose tmux window closed.
+// release frees a project's session slot.
+func (d *Dispatcher) release(project string) {
+	d.mu.Lock()
+	delete(d.sessions, project)
+	d.mu.Unlock()
+}
+
+// sessionFinished handles a session whose tmux window closed (the lock is
+// already released by the caller).
 func (d *Dispatcher) sessionFinished(s *session) {
 	issue, err := d.taskdock.GetIssue(s.key)
 	if err != nil {

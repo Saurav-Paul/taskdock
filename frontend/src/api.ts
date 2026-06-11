@@ -206,6 +206,28 @@ export const addLink = (key: string, url: string, title?: string) =>
 export const deleteLink = (key: string, id: number) =>
   request<void>(`/api/issues/${key}/links/${id}`, { method: "DELETE" });
 
+export interface DispatcherSession {
+  project: string;
+  key: string;
+  pane_id: string;
+}
+
+export interface DispatcherStatus {
+  running: boolean;
+  dry_run?: boolean;
+  paused?: boolean;
+  /** ISO timestamp; present only when running. */
+  started_at?: string;
+  sessions?: DispatcherSession[];
+  projects?: string[];
+}
+
+export const getDispatcherStatus = () =>
+  request<DispatcherStatus>("/api/dispatcher/status");
+
+export const getDispatcherLog = () =>
+  request<{ lines: string[] }>("/api/dispatcher/log");
+
 export interface Attachment {
   url: string;
   filename: string;

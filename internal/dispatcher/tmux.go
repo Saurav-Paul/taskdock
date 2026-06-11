@@ -67,3 +67,9 @@ func PaneContent(paneID string) string {
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
+
+// MarkWindowDone renames a finished session's window so the tmux window
+// list shows which sessions are complete (windows stay open for review).
+func MarkWindowDone(paneID, key string) {
+	_ = exec.Command("tmux", "rename-window", "-t", paneID, "✓ "+key).Run()
+}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Issue, IssuePatch, Label, Project, Status, User } from "./api";
+import type { DispatcherStatus, Issue, IssuePatch, Label, Project, Status, User } from "./api";
 import {
+  getDispatcherStatus,
   getIssue,
   getIssues,
   getLabels,
@@ -16,6 +17,7 @@ import { flattenVisible, groupIssues } from "./grouping";
 import { CommandPalette, type PaletteCommand } from "./components/CommandPalette";
 import { CreateIssueModal } from "./components/CreateIssueModal";
 import { CreateProjectModal } from "./components/CreateProjectModal";
+import { DispatcherModal } from "./components/DispatcherModal";
 import { IssueDetail } from "./components/IssueDetail";
 import { IssueList } from "./components/IssueList";
 import { McpIcon, McpModal } from "./components/McpModal";
@@ -147,6 +149,30 @@ export default function App() {
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
+  const [showDispatcher, setShowDispatcher] = useState(false);
+
+  // ── Dispatcher status ───────────────────────────────
+  // Polled every 10s. Any fetch failure (daemon down, proxy 404 before the
+  // container redeploys, network error) just means "not running".
+  const [dispatcherStatus, setDispatcherStatus] = useState<DispatcherStatus>({ running: false });
+
+  useEffect(() => {
+    let cancelled = false;
+    const poll = () =>
+      getDispatcherStatus()
+        .then((s) => {
+          if (!cancelled) setDispatcherStatus(s);
+        })
+        .catch(() => {
+          if (!cancelled) setDispatcherStatus({ running: false });
+        });
+    void poll();
+    const timer = window.setInterval(poll, 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     Promise.all([getProjects(), getUsers(), getLabels()])
@@ -301,8 +327,8 @@ export default function App() {
   }, [contextIssue, users, projects, issues, patchIssue, copyText]);
 
   // Keyboard shortcuts — read latest state via ref to keep a single stable listener.
-  const stateRef = useRef({ visibleIssues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp, showPalette, refreshing });
-  stateRef.current = { visibleIssues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp, showPalette, refreshing };
+  const stateRef = useRef({ visibleIssues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp, showPalette, showDispatcher, refreshing });
+  stateRef.current = { visibleIssues, selectedIndex, openIssue, showCreate, showCreateProject, showMcp, showPalette, showDispatcher, refreshing };
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -329,6 +355,7 @@ export default function App() {
 
       if (e.key === "Escape") {
         if (s.showPalette) setShowPalette(false);
+        else if (s.showDispatcher) setShowDispatcher(false);
         else if (s.showMcp) setShowMcp(false);
         else if (s.showCreateProject) setShowCreateProject(false);
         else if (s.showCreate) setShowCreate(false);
@@ -337,18 +364,18 @@ export default function App() {
       }
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
 
-      if (e.key === "c" && !s.showPalette && !s.showCreate && !s.showCreateProject && !s.showMcp) {
+      if (e.key === "c" && !s.showPalette && !s.showCreate && !s.showCreateProject && !s.showMcp && !s.showDispatcher) {
         e.preventDefault();
         setShowCreate(true);
         return;
       }
       // Refresh works with the detail open too (it re-fetches the open issue).
-      if (e.key === "r" && !s.showPalette && !s.showCreate && !s.showCreateProject && !s.showMcp) {
+      if (e.key === "r" && !s.showPalette && !s.showCreate && !s.showCreateProject && !s.showMcp && !s.showDispatcher) {
         e.preventDefault();
         if (!s.refreshing) refreshRef.current();
         return;
       }
-      if (s.showPalette || s.showCreate || s.showCreateProject || s.showMcp || s.openIssue) return;
+      if (s.showPalette || s.showCreate || s.showCreateProject || s.showMcp || s.showDispatcher || s.openIssue) return;
 
       if (e.key === "j") {
         e.preventDefault();
@@ -403,6 +430,24 @@ export default function App() {
             title="Refresh (r)"
           >
             <RefreshIcon spinning={refreshing} />
+          </button>
+          <button
+            className="btn btn-small dispatcher-btn"
+            onClick={() => setShowDispatcher(true)}
+            title={
+              dispatcherStatus.running
+                ? dispatcherStatus.paused
+                  ? "Dispatcher paused"
+                  : "Dispatcher running"
+                : "dispatcher not running"
+            }
+          >
+            <span
+              className={`dispatcher-dot ${
+                dispatcherStatus.running ? (dispatcherStatus.paused ? "paused" : "on") : "off"
+              }`}
+            />
+            dispatcher
           </button>
           <button
             className="btn btn-small mcp-btn"
@@ -470,6 +515,21 @@ export default function App() {
 
       {showMcp && (
         <McpModal projectKey={projectFilter} projects={projects} onClose={() => setShowMcp(false)} />
+      )}
+
+      {showDispatcher && (
+        <DispatcherModal
+          status={dispatcherStatus}
+          onClose={() => setShowDispatcher(false)}
+          onOpenIssue={(key) =>
+            getIssue(key)
+              .then((issue) => {
+                setOpenIssue(issue);
+                setShowDispatcher(false);
+              })
+              .catch((e) => setLoadError(`Failed to open ${key}: ${(e as Error).message}`))
+          }
+        />
       )}
 
       {showPalette && (
