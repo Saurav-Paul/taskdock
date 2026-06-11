@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -62,7 +63,18 @@ func main() {
 
 	// --- Static frontend (prod) ---
 	// The built React app is copied to ./static in the Docker image.
-	e.Static("/", "static")
+	// HTML5 mode serves index.html for app routes like /PRO-967, so issue
+	// deep links pasted into a new tab load the app with that issue open.
+	e.Use(middleware.StaticWithConfig(middleware.StaticConfig{
+		Root:  "static",
+		HTML5: true,
+		Skipper: func(c echo.Context) bool {
+			p := c.Request().URL.Path
+			return strings.HasPrefix(p, "/api/") ||
+				p == "/mcp" || strings.HasPrefix(p, "/mcp/") ||
+				strings.HasPrefix(p, "/files/")
+		},
+	}))
 
 	e.Logger.Fatal(e.Start(":" + cfg.Port))
 }

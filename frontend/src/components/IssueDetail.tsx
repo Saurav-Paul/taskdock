@@ -64,7 +64,7 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
   const [fullscreen, setFullscreen] = useState(
     () => localStorage.getItem(FULLSCREEN_STORAGE_KEY) === "1"
   );
-  const [copied, setCopied] = useState<"key" | "branch" | null>(null);
+  const [copied, setCopied] = useState<"key" | "branch" | "link" | null>(null);
   const copiedTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -111,7 +111,7 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  function copyText(text: string, which: "key" | "branch") {
+  function copyText(text: string, which: "key" | "branch" | "link") {
     navigator.clipboard
       .writeText(text)
       .then(() => {
@@ -269,6 +269,13 @@ export function IssueDetail({ issue: initial, users, labels, onClose, onChanged,
             title={branch}
           >
             {copied === "branch" ? <CheckIcon /> : <BranchIcon />}
+          </button>
+          <button
+            className="icon-btn"
+            onClick={() => copyText(`${location.origin}/${issue.key}`, "link")}
+            title="Copy link"
+          >
+            {copied === "link" ? <CheckIcon /> : <ShareIcon />}
           </button>
           {copied && <span className="muted copied-note">Copied</span>}
           <span className="detail-header-spacer" />
@@ -631,6 +638,21 @@ function LinkIcon() {
     <svg width="14" height="14" viewBox="0 0 14 14" aria-label="Link">
       <path
         d="M5.8 8.2 L8.2 5.8 M6.3 4.2 L7.5 3 A2.2 2.2 0 0 1 11 6.5 L9.8 7.7 M7.7 9.8 L6.5 11 A2.2 2.2 0 0 1 3 7.5 L4.2 6.3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ShareIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" aria-label="Copy link">
+      <path
+        d="M7 8.8 V1.8 M4.5 4 L7 1.5 L9.5 4 M4.5 6.5 H3 V12.5 H11 V6.5 H9.5"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.3"
