@@ -189,9 +189,8 @@ func (d *Dispatcher) Run() error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /hook", d.HandleWebhook)
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok"))
-	})
+	mux.HandleFunc("GET /health", d.handleHealth)
+	mux.HandleFunc("GET /log", d.handleLog)
 
 	log.Printf("dispatcher listening on %s (taskdock: %s, dry-run: %v)", d.cfg.Listen, d.cfg.TaskdockURL, d.dryRun)
 	return http.ListenAndServe(d.cfg.Listen, mux)

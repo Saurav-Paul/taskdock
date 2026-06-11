@@ -10,6 +10,7 @@ import (
 
 	"github.com/Saurav-Paul/taskdock/internal/api/attachments"
 	"github.com/Saurav-Paul/taskdock/internal/api/comments"
+	"github.com/Saurav-Paul/taskdock/internal/api/dispatcherproxy"
 	"github.com/Saurav-Paul/taskdock/internal/api/issues"
 	"github.com/Saurav-Paul/taskdock/internal/api/labels"
 	"github.com/Saurav-Paul/taskdock/internal/api/mcp"
@@ -56,6 +57,9 @@ func main() {
 	// --- Attachments (pasted images) ---
 	attachments.Register(e.Group("/api/attachments"), cfg)
 	e.Static("/files", cfg.FilesDir)
+
+	// --- Dispatcher status/log proxy (UI visibility for the host daemon) ---
+	dispatcherproxy.Register(e.Group("/api/dispatcher"), cfg.DispatcherURL)
 
 	// --- MCP endpoint (POST /mcp) ---
 	mcpService := mcp.NewService(projectService, issueService, commentService, cfg.FilesDir)
