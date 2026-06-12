@@ -386,6 +386,46 @@ kbd {
   transform: rotate(0deg);
 }
 
+/* Fixed-width leading slot on every row so chevrons, tree marks, and plain
+   rows all keep the priority/key columns aligned. */
+.row-gutter {
+  flex-shrink: 0;
+  width: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Per-row subtask collapse toggle. */
+.sub-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.sub-toggle:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+/* Leaf subtask rows get a └ connector where parents show the chevron. */
+.sub-tree-mark {
+  width: 8px;
+  height: 8px;
+  margin-top: -6px;
+  border-left: 1.5px solid var(--border);
+  border-bottom: 1.5px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+
 .issue-row {
   display: flex;
   align-items: center;

@@ -79,11 +79,34 @@ export default function App() {
     });
   }, []);
 
+  // Collapsed subtask parents (by issue key) survive reloads too.
+  const [collapsedParents, setCollapsedParents] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem("taskdock.collapsed-parents");
+      return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch {
+      return new Set();
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("taskdock.collapsed-parents", JSON.stringify([...collapsedParents]));
+  }, [collapsedParents]);
+
+  const toggleParent = useCallback((key: string) => {
+    setCollapsedParents((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
   const groups = useMemo(() => groupIssues(issues), [issues]);
-  // What j/k actually walks: display order, collapsed groups skipped.
+  // What j/k actually walks: display order, collapsed groups/parents skipped.
   const visibleIssues = useMemo(
-    () => flattenVisible(groups, collapsedStatuses),
-    [groups, collapsedStatuses]
+    () => flattenVisible(groups, collapsedStatuses, collapsedParents),
+    [groups, collapsedStatuses, collapsedParents]
   );
 
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -472,6 +495,8 @@ export default function App() {
           groups={groups}
           collapsed={collapsedStatuses}
           onToggleGroup={toggleGroup}
+          collapsedParents={collapsedParents}
+          onToggleParent={toggleParent}
           labels={labels}
           users={users}
           selectedIndex={selectedIndex}
